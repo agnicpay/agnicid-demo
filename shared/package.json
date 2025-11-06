@@ -1,0 +1,43 @@
+{
+  "name": "@agnicid/shared",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./schemas/email": {
+      "import": "./dist/schemas/email-credential.js",
+      "types": "./dist/schemas/email-credential.d.ts"
+    },
+    "./schemas/age": {
+      "import": "./dist/schemas/age-credential.js",
+      "types": "./dist/schemas/age-credential.d.ts"
+    },
+    "./schemas/delegation": {
+      "import": "./dist/schemas/agent-delegation-credential.js",
+      "types": "./dist/schemas/agent-delegation-credential.d.ts"
+    },
+    "./crypto": {
+      "import": "./dist/crypto/index.js",
+      "types": "./dist/crypto/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf dist",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "bs58": "^5.0.0",
+    "mkdirp": "^3.0.1",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "rimraf": "^5.0.5"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "agnic-id-mvp",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "shared",
+    ".tooling"
+  ],
+  "scripts": {
+    "build": "npm run -ws --if-present build",
+    "clean": "npm run -ws --if-present clean || true",
+    "demo": "tsx .tooling/scripts/demo.ts",
+    "lint": "npm run -ws --if-present lint"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-jsx-a11y": "^6.8.0",
+    "eslint-plugin-react": "^7.34.1",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "prettier": "^3.2.5",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  }
+}

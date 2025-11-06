@@ -1,0 +1,40 @@
+{
+  "name": "@agnicid/wallet-ui",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm:dev:server\" \"vite\"",
+    "dev:server": "tsx --tsconfig tsconfig.server.json server/index.ts",
+    "build": "tsc -p tsconfig.json && vite build && tsc -p tsconfig.server.json",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "dependencies": {
+    "@agnicid/agent-sdk": "file:../agent-sdk",
+    "adm-zip": "^0.5.12",
+    "@headlessui/react": "^1.7.18",
+    "axios": "^1.6.8",
+    "cors": "^2.8.5",
+    "express": "^4.18.3",
+    "clsx": "^2.1.0",
+    "idb-keyval": "^6.2.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.3"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.64",
+    "@types/react-dom": "^18.2.22",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/adm-zip": "^0.5.4",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.18",
+    "concurrently": "^8.2.2",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.3",
+    "tsx": "^4.7.2",
+    "vite": "^5.1.4"
+  }
+}

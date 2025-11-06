@@ -1,0 +1,37 @@
+{
+  "name": "@agnicid/agent-sdk",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "agnicid": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf dist",
+    "lint": "eslint src --ext .ts",
+    "test": "tsx ./src/__tests__/agent-sdk.spec.ts",
+    "dev:cli": "tsx ./src/cli.ts"
+  },
+  "dependencies": {
+    "@agnicid/shared": "file:../../shared",
+    "axios": "^1.6.8",
+    "date-fns": "^3.6.0",
+    "jose": "^5.2.2",
+    "mkdirp": "^3.0.1",
+    "nanoid": "^5.0.7",
+    "tweetnacl": "^1.0.3",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/mkdirp": "^1.0.2",
+    "@types/node": "^20.11.30",
+    "@types/yargs": "^17.0.32",
+    "rimraf": "^5.0.5"
+  }
+}

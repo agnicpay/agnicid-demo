@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist-server",
+    "rootDir": "server",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "composite": true
+  },
+  "include": [
+    "server/**/*"
+  ],
+  "references": [
+    {
+      "path": "../agent-sdk/tsconfig.json"
+    }
+  ]
+}
