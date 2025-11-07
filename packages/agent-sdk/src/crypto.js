@@ -41,4 +41,3 @@ export const signDetached = (payload, secretKeyBase64) => {
     const signature = nacl.sign.detached(payload, secretKey);
     return Buffer.from(signature).toString("base64url");
 };
-//# sourceMappingURL=crypto.js.map

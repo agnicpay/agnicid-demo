@@ -25,4 +25,3 @@ export const buildPaymentEnvelope = async (payload) => {
         header: Buffer.from(JSON.stringify(envelope)).toString("base64url")
     };
 };
-//# sourceMappingURL=payment.js.map

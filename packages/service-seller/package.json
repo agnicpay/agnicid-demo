@@ -4,15 +4,20 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./server": "./dist/server.js"
+  },
   "scripts": {
-    "build": "tsc -b tsconfig.json",
-    "clean": "rimraf dist",
+    "build": "tsc -b tsconfig.json --force",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
     "dev": "tsx watch ./src/server.ts",
     "start": "node dist/server.js",
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {
     "@agnicid/agent-sdk": "file:../agent-sdk",
+    "@agnicid/shared": "file:../../shared",
     "cors": "^2.8.5",
     "express": "^4.18.3",
     "morgan": "^1.10.0",

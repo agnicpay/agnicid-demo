@@ -59,4 +59,3 @@ export const deriveKeypairFromSecret = (secret) => {
         secretKey: encode(derived.secretKey)
     };
 };
-//# sourceMappingURL=ed25519.js.map

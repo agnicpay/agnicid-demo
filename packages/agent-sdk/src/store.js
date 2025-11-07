@@ -38,4 +38,3 @@ export const loadCredentialByKind = async (kind) => {
         .filter((item) => item.kind === kind)
         .sort((a, b) => new Date(b.issuedAt ?? 0).getTime() - new Date(a.issuedAt ?? 0).getTime())[0];
 };
-//# sourceMappingURL=store.js.map

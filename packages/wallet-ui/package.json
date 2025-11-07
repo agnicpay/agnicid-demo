@@ -3,6 +3,10 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "exports": {
+    "./server": "./dist-server/index.js",
+    "./server/api": "./dist-server/createWalletApi.js"
+  },
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:vite\"",
     "dev:vite": "vite --host 127.0.0.1 --port 5173",

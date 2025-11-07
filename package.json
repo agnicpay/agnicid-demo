@@ -9,11 +9,13 @@
     ".tooling"
   ],
   "scripts": {
-    "build": "npm run -ws --if-present build",
+    "build": "npm run build:deps && npm run build:workspaces",
+    "build:workspaces": "npm run -ws --if-present build --include-workspace-root=false",
+    "build:deps": "npm run build --workspace @agnicid/shared && npm run build --workspace @agnicid/agent-sdk && npm run build --workspace @agnicid/issuer-cli",
     "clean": "npm run -ws --if-present clean || true",
     "demo": "tsx .tooling/scripts/demo.ts",
     "lint": "npm run -ws --if-present lint",
-    "dev": "concurrently \"npm:dev:backend-services\" \"npm:dev:main-server\"",
+    "dev": "npm run dev:main-server",
     "dev:backend-services": "concurrently \"npm:dev:seller\" \"npm:dev:wallet-api\" \"npm:dev:frontend\"",
     "dev:main-server": "cd packages/main-server && npm run dev",
     "dev:seller": "npm run dev --workspace @agnicid/service-seller",

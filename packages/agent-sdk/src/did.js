@@ -34,4 +34,3 @@ export const getVerificationMethodId = (document) => {
     }
     return method.id;
 };
-//# sourceMappingURL=did.js.map

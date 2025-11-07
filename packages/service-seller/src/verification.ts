@@ -5,7 +5,7 @@ import type {
   AgeCredential,
   EmailCredential
 } from "@agnicid/agent-sdk";
-import type { DidDocument } from "@agnicid/shared";
+import type { DidDocument, VerificationMethod } from "@agnicid/shared";
 import type { Challenge, VerificationLog } from "./types.js";
 
 type LogFn = (
@@ -196,7 +196,9 @@ const loadVerificationKey = async (did: string, expectedKid?: string) => {
 
 const selectVerificationMethod = (document: DidDocument, expectedKid?: string) => {
   if (expectedKid) {
-    const match = document.verificationMethod.find((method) => method.id === expectedKid);
+    const match = document.verificationMethod.find(
+      (method: VerificationMethod) => method.id === expectedKid
+    );
     if (match) {
       return match;
     }

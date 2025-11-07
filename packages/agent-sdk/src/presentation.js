@@ -39,4 +39,3 @@ export const createPresentation = async (input) => {
         path: filePath
     };
 };
-//# sourceMappingURL=presentation.js.map

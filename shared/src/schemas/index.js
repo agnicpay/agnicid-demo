@@ -4,4 +4,3 @@ import agentDelegationCredential from "./agent-delegation-credential.schema.json
 export const email = emailCredential;
 export const age = ageCredential;
 export const delegation = agentDelegationCredential;
-//# sourceMappingURL=index.js.map

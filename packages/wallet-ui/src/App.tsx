@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 
 import "./index.css";
@@ -70,8 +70,22 @@ interface WalletStatus {
   credentials: CredentialHistoryEntry[];
 }
 
+const determineInitialView = (): ViewMode => {
+  if (typeof window === "undefined") {
+    return "landing";
+  }
+  const path = window.location.pathname.toLowerCase();
+  if (path.startsWith("/agent")) {
+    return "agent";
+  }
+  if (path.startsWith("/wallet")) {
+    return "wallet";
+  }
+  return "landing";
+};
+
 export function App() {
-  const [view, setView] = useState<ViewMode>("landing");
+  const [view, setViewState] = useState<ViewMode>(() => determineInitialView());
   const [stepIndex, setStepIndex] = useState(0);
   const [email, setEmail] = useState("");
   const [emailVerified, setEmailVerified] = useState(false);
@@ -91,6 +105,27 @@ export function App() {
   const [issuing, setIssuing] = useState<CredentialKind | null>(null);
   const [autoIssueRan, setAutoIssueRan] = useState(false);
   const [viewerEntry, setViewerEntry] = useState<CredentialHistoryEntry | null>(null);
+
+  const setView = useCallback((next: ViewMode) => {
+    setViewState(next);
+    if (typeof window !== "undefined") {
+      const targetPath = next === "agent" ? "/agent" : next === "wallet" ? "/wallet" : "/";
+      if (window.location.pathname !== targetPath) {
+        window.history.replaceState(null, "", targetPath);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const handlePopState = () => {
+      setViewState(determineInitialView());
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const canContinue = useMemo(() => {
     switch (steps[stepIndex].id) {
@@ -699,6 +734,8 @@ function CredentialJsonViewer({
   );
 }
 
+type SidePanelTab = "flow" | "cli" | "identity";
+
 function AgentIde({ onBack }: { onBack: () => void }) {
   const [jobsUrl, setJobsUrl] = useState("/api/seller/jobs");
   const [events, setEvents] = useState<AgentTimelineEvent[]>([]);
@@ -707,8 +744,13 @@ function AgentIde({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
+  const [walletStatus, setWalletStatus] = useState<WalletStatus | null>(null);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(false);
+  const [terminalLines, setTerminalLines] = useState<string[]>([]);
+  const [sideTab, setSideTab] = useState<SidePanelTab>("identity");
   const timers = useRef<number[]>([]);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
+  const terminalRef = useRef<HTMLPreElement | null>(null);
 
   const command = `agnicid x402:call ${jobsUrl} --bundle ~/.agnicid`;
 
@@ -724,6 +766,32 @@ function AgentIde({ onBack }: { onBack: () => void }) {
     }
   }, [displayEvents]);
 
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [terminalLines]);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      setIsLoadingStatus(true);
+      try {
+        const response = await axios.get<WalletStatus>(`${API_BASE}/status`);
+        setWalletStatus(response.data);
+      } catch (statusError) {
+        console.warn("Unable to load wallet status for agent view", statusError);
+      } finally {
+        setIsLoadingStatus(false);
+      }
+    };
+    fetchStatus();
+  }, []);
+
+  const appendTerminalLines = useCallback((lines: string | string[]) => {
+    const payload = Array.isArray(lines) ? lines : [lines];
+    setTerminalLines((prev) => [...prev, ...payload]);
+  }, []);
+
   const runAgent = async () => {
     setIsRunning(true);
     setError(null);
@@ -732,6 +800,11 @@ function AgentIde({ onBack }: { onBack: () => void }) {
     setDisplayEvents([]);
     timers.current.forEach((timer) => window.clearTimeout(timer));
     timers.current = [];
+    const commandLine = `$ ${command}`;
+    setTerminalLines((prev) => {
+      const spacer = prev.length ? [""] : [];
+      return [...prev, ...spacer, commandLine];
+    });
     try {
       const response = await axios.post(`${API_BASE}/agent/run`, {
         jobs: jobsUrl
@@ -740,13 +813,21 @@ function AgentIde({ onBack }: { onBack: () => void }) {
       setEvents(eventLog);
       setResult(result);
       replayEvents(eventLog);
+      const jobs = result.response?.data?.jobs ?? [];
+      appendTerminalLines(
+        `[result] status ${result.response.status} · ${jobs.length} job${
+          jobs.length === 1 ? "" : "s"
+        } returned`
+      );
     } catch (err) {
+      const message = extractError(err);
       const fallbackEvents = (err as any)?.response?.data?.events ?? [];
       if (fallbackEvents.length) {
         setEvents(fallbackEvents);
         replayEvents(fallbackEvents);
       }
-      setError(extractError(err));
+      setError(message);
+      appendTerminalLines(`[error] ${message}`);
     } finally {
       setIsRunning(false);
     }
@@ -757,10 +838,59 @@ function AgentIde({ onBack }: { onBack: () => void }) {
     eventLog.forEach((event, index) => {
       const timer = window.setTimeout(() => {
         setDisplayEvents((prev) => [...prev, event]);
+        const timestamp = new Date(event.timestamp).toLocaleTimeString();
+        const detail = event.detail ? ` — ${event.detail}` : "";
+        appendTerminalLines(`[${timestamp}] ${event.label}${detail}`);
       }, index * 250);
       timers.current.push(timer);
     });
   };
+
+  const humanDid = walletStatus?.dids?.find((item) => item.alias === "human")?.did;
+  const agentDid = walletStatus?.dids?.find((item) => item.alias === "agent")?.did;
+  const credentialList = useMemo(() => {
+    if (!walletStatus?.credentials?.length) {
+      return [];
+    }
+    return [...walletStatus.credentials]
+      .sort((a, b) => new Date(b.issuedAt ?? 0).getTime() - new Date(a.issuedAt ?? 0).getTime())
+      .slice(0, 5);
+  }, [walletStatus]);
+  const terminalContent = useMemo(() => terminalLines.join("\n"), [terminalLines]);
+
+  const cliGuide = [
+    {
+      command: "agnicid x402:call --jobs <url>",
+      detail: "Execute the full x402 payment + proof flow against a seller.",
+      options: [
+        { flag: "--jobs <url>", detail: "Seller jobs endpoint (required)." },
+        {
+          flag: "--include-delegation / --no-include-delegation",
+          detail: "Toggle inclusion of the agent delegation credential."
+        }
+      ]
+    },
+    {
+      command: "agnicid vp:make --challenge <nonce>",
+      detail: "Construct a JWT-VC presentation from stored credentials.",
+      options: [
+        { flag: "--challenge <nonce>", detail: "Challenge/nonce from the seller policy." },
+        {
+          flag: "--audience <origin>",
+          detail: "Audience value for the VP (defaults to seller origin)."
+        },
+        {
+          flag: "--cred email age delegation",
+          detail: "Credential kinds to include (defaults to all)."
+        }
+      ]
+    },
+    {
+      command: "agnicid vc:list",
+      detail: "Print all stored credentials in ~/.agnicid.",
+      options: []
+    }
+  ];
 
   const docs = [
     {
@@ -835,7 +965,12 @@ function AgentIde({ onBack }: { onBack: () => void }) {
                   {isRunning ? "Running…" : "Run Agent Flow"}
                 </button>
               </div>
-              <pre className="mt-4 h-36 overflow-auto rounded-2xl border border-slate-800 bg-slate-950 p-4 font-mono text-xs text-emerald-300">{command}</pre>
+              <pre
+                ref={terminalRef}
+                className="mt-4 h-48 overflow-auto rounded-2xl border border-slate-800 bg-black/60 p-4 font-mono text-xs text-emerald-200"
+              >
+                {terminalContent}
+              </pre>
             </section>
 
             <section className="rounded-3xl bg-slate-900/70 p-6 shadow-2xl ring-1 ring-white/5">
@@ -910,21 +1045,169 @@ function AgentIde({ onBack }: { onBack: () => void }) {
             )}
           </div>
 
-          <aside className="space-y-4 rounded-3xl bg-slate-900/40 p-6 shadow-2xl ring-1 ring-white/10">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
-              Request / 402 / Resubmit
-            </h3>
-            <ol className="space-y-4 text-sm text-slate-300">
-              {docs.map((doc) => (
-                <li key={doc.title} className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
-                  <p className="text-white">{doc.title}</p>
-                  <p className="text-xs text-slate-400">{doc.detail}</p>
-                </li>
+          <aside className="rounded-3xl bg-slate-900/40 p-6 shadow-2xl ring-1 ring-white/10">
+            <div className="flex gap-2 rounded-2xl border border-slate-800 bg-slate-950/50 p-1">
+              {(["identity", "cli", "flow"] as SidePanelTab[]).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setSideTab(tab)}
+                  className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition ${
+                    sideTab === tab ? "bg-slate-800 text-white" : "text-slate-500"
+                  }`}
+                >
+                  {tab === "identity" ? "Identity" : tab === "cli" ? "CLI" : "Flow"}
+                </button>
               ))}
-            </ol>
+            </div>
+            <div className="mt-4 space-y-4">
+              {sideTab === "identity" && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
+                      Local DIDs
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isLoadingStatus) return;
+                        setIsLoadingStatus(true);
+                        axios
+                          .get<WalletStatus>(`${API_BASE}/status`)
+                          .then((response) => setWalletStatus(response.data))
+                          .catch((statusError) =>
+                            console.warn("Unable to refresh wallet status", statusError)
+                          )
+                          .finally(() => setIsLoadingStatus(false));
+                      }}
+                      className="text-xs font-semibold text-slate-400 hover:text-white"
+                      disabled={isLoadingStatus}
+                    >
+                      {isLoadingStatus ? "Refreshing…" : "Refresh"}
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <IdentityCard
+                      label="User Identity"
+                      alias="human"
+                      did={humanDid}
+                      description="Local human DID used to issue credentials."
+                    />
+                    <IdentityCard
+                      label="Agent Identity"
+                      alias="agent"
+                      did={agentDid}
+                      description="Delegated agent DID responding to x402."
+                    />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                      Credentials
+                    </h4>
+                    {credentialList.length === 0 ? (
+                      <p className="mt-3 text-xs text-slate-500">No credentials detected.</p>
+                    ) : (
+                      <ul className="mt-3 space-y-3 text-sm text-slate-200">
+                        {credentialList.map((entry) => (
+                          <li
+                            key={entry.id}
+                            className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3"
+                          >
+                            <p className="font-semibold text-white">{entry.kind ?? entry.type}</p>
+                            <p className="text-xs text-slate-500">
+                              {entry.issuedAt
+                                ? new Date(entry.issuedAt).toLocaleString()
+                                : "Unknown date"}
+                            </p>
+                            {entry.path && (
+                              <p className="text-[11px] font-mono text-slate-500 break-all">
+                                {entry.path}
+                              </p>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {sideTab === "cli" && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
+                    CLI Reference
+                  </h3>
+                  <ol className="space-y-3 text-sm text-slate-200">
+                    {cliGuide.map((item) => (
+                      <li
+                        key={item.command}
+                        className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3"
+                      >
+                        <p className="font-mono text-xs text-emerald-300">{item.command}</p>
+                        <p className="text-xs text-slate-400">{item.detail}</p>
+                        {item.options?.length ? (
+                          <ul className="mt-2 space-y-1 text-[11px] text-slate-400">
+                            {item.options.map((opt) => (
+                              <li key={opt.flag} className="flex flex-col">
+                                <span className="font-mono text-emerald-400">{opt.flag}</span>
+                                <span>{opt.detail}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="text-[11px] text-slate-500">
+                    Tip: all commands emit JSON, so piping into <code className="font-mono">jq</code>{" "}
+                    makes it easier to inspect envelopes and VP payloads.
+                  </p>
+                </div>
+              )}
+
+              {sideTab === "flow" && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
+                    Request / 402 / Resubmit
+                  </h3>
+                  <ol className="space-y-4 text-sm text-slate-300">
+                    {docs.map((doc) => (
+                      <li
+                        key={doc.title}
+                        className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3"
+                      >
+                        <p className="text-white">{doc.title}</p>
+                        <p className="text-xs text-slate-400">{doc.detail}</p>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </div>
           </aside>
         </div>
       </div>
+    </div>
+  );
+}
+
+function IdentityCard({
+  label,
+  alias,
+  did,
+  description
+}: {
+  label: string;
+  alias: string;
+  did?: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+      <p className="text-xs uppercase tracking-[0.4em] text-slate-500">{label}</p>
+      <p className="mt-1 font-mono text-sm text-white">{did ?? "not created yet"}</p>
+      <p className="mt-1 text-xs text-slate-500">{description}</p>
+      <p className="mt-2 text-[11px] uppercase tracking-[0.3em] text-slate-500">alias: {alias}</p>
     </div>
   );
 }

@@ -70,4 +70,3 @@ export const listDidDocuments = async () => {
         throw error;
     }
 };
-//# sourceMappingURL=mock-sol.js.map

@@ -33,8 +33,9 @@ async function commandVpMake(argv: any) {
 
 async function commandX402Call(argv: any) {
   await ensureStore();
+  const jobsUrl = normalizeJobsUrl(argv.jobs as string);
   const result = await executeX402Flow(
-    argv.jobs,
+    jobsUrl,
     {
       includeDelegation: argv.includeDelegation !== false
     },
@@ -53,6 +54,19 @@ async function commandListVcs() {
   const list = await listStoredCredentials();
   logJson("Stored credentials", list);
 }
+
+const normalizeJobsUrl = (input: string) => {
+  if (/^https?:\/\//i.test(input)) {
+    return input;
+  }
+  const base =
+    process.env.AGENT_JOBS_BASE ??
+    `http://localhost:${process.env.PORT ?? process.env.AGNICID_PORT ?? 3000}`;
+  if (input.startsWith("/")) {
+    return `${base}${input}`;
+  }
+  return `${base}/${input}`;
+};
 
 yargs(hideBin(process.argv))
   .scriptName("agnicid")

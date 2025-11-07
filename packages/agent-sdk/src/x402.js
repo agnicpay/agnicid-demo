@@ -145,4 +145,3 @@ export const executeX402Flow = async (jobsEndpoint, options = {}, onEvent) => {
         throw error;
     }
 };
-//# sourceMappingURL=x402.js.map

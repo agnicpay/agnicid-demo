@@ -27,8 +27,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "clean": "rimraf dist",
+    "build": "tsc -b tsconfig.json --force",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {

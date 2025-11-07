@@ -6,4 +6,3 @@ export const readJson = async (file) => {
 export const writeJson = async (file, data) => {
     await fs.writeFile(file, JSON.stringify(data, null, 2), "utf-8");
 };
-//# sourceMappingURL=fs.js.map

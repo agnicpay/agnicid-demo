@@ -10,4 +10,3 @@ export const ensureStore = async () => {
     ]);
 };
 export const resolveStorePath = resolveAgnicIdPath;
-//# sourceMappingURL=config.js.map
