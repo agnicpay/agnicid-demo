@@ -8,7 +8,14 @@
     "target": "ES2022",
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "composite": true
+    "composite": true,
+    "baseUrl": ".",
+    "paths": {
+      "@agnicid/agent-sdk": ["../agent-sdk/src/index.ts"],
+      "@agnicid/agent-sdk/*": ["../agent-sdk/src/*"],
+      "@agnicid/issuer-cli": ["../issuer-cli/src/index.ts"],
+      "@agnicid/issuer-cli/*": ["../issuer-cli/src/*"]
+    }
   },
   "include": [
     "server/**/*"
