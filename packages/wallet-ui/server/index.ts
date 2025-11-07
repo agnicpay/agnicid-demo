@@ -3,7 +3,8 @@ import cors from "cors";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import AdmZip from "adm-zip";
-import { listStoredCredentials } from "@agnicid/agent-sdk";
+import { listStoredCredentials, executeX402Flow } from "@agnicid/agent-sdk";
+import type { AgentEvent } from "@agnicid/agent-sdk";
 import {
   AGNIC_ID_HOME,
   ensureStore,
@@ -121,6 +122,25 @@ app.post(
       spendCapDaily
     });
     res.json(result.stored);
+  })
+);
+
+app.post(
+  "/api/agent/run",
+  asyncHandler(async (req, res) => {
+    await ensureStore();
+    const { jobs = "http://localhost:8081/jobs", includeDelegation = true } = req.body ?? {};
+    const events: AgentEvent[] = [];
+    try {
+      const result = await executeX402Flow(
+        jobs,
+        { includeDelegation },
+        (event) => events.push(event)
+      );
+      res.json({ result, events });
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message, events });
+    }
   })
 );
 

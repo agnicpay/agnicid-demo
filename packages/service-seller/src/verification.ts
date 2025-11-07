@@ -8,7 +8,12 @@ import type {
 import type { DidDocument } from "@agnicid/shared";
 import type { Challenge, VerificationLog } from "./types.js";
 
-type LogFn = (step: string, status: VerificationLog["status"], detail: string) => void;
+type LogFn = (
+  step: string,
+  status: VerificationLog["status"],
+  detail: string,
+  meta?: Record<string, unknown>
+) => void;
 
 const toBase64Url = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
 
@@ -99,6 +104,16 @@ export const verifyPresentation = async (
   if (delegationCredential.payload.vc.credentialSubject.ownerEmail !== emailCredential.payload.vc.credentialSubject.email) {
     throw new Error("Delegation owner email does not match email credential");
   }
+
+  log("policy.eval", "info", "Policy evaluation complete", {
+    email_verified: emailVerified,
+    age_over_18: ageOver18,
+    holderMatchesDelegation: holder === delegationSubject,
+    delegationOwnerMatches:
+      delegationCredential.payload.vc.credentialSubject.ownerEmail ===
+      emailCredential.payload.vc.credentialSubject.email,
+    enforcedUnder18: forceUnder18
+  });
 
   log("vp.verified", "success", "Presentation and credentials verified");
 

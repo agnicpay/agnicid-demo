@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 
 const API_BASE = import.meta.env.VITE_WALLET_API_BASE ?? "http://localhost:8787";
@@ -39,6 +39,7 @@ const steps = [
 
 const ISSUE_STEP_INDEX = steps.findIndex((step) => step.id === "issue");
 
+type ViewMode = "landing" | "wallet" | "agent";
 type CredentialKind = "email" | "age" | "delegation";
 
 interface CredentialHistoryEntry {
@@ -47,6 +48,16 @@ interface CredentialHistoryEntry {
   issuedAt: string;
   path: string;
   kind?: CredentialKind;
+  payload?: Record<string, unknown>;
+}
+
+interface AgentTimelineEvent {
+  id: string;
+  type: string;
+  label: string;
+  detail?: string;
+  payload?: Record<string, unknown>;
+  timestamp: string;
 }
 
 interface WalletStatus {
@@ -57,6 +68,7 @@ interface WalletStatus {
 }
 
 export function App() {
+  const [view, setView] = useState<ViewMode>("landing");
   const [stepIndex, setStepIndex] = useState(0);
   const [email, setEmail] = useState("");
   const [emailVerified, setEmailVerified] = useState(false);
@@ -65,7 +77,6 @@ export function App() {
   const [bundle, setBundle] = useState<BundlePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [storePath, setStorePath] = useState(AGNIC_ID_HOME_LABEL);
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const [walletStatus, setWalletStatus] = useState<WalletStatus | null>(null);
   const [history, setHistory] = useState<CredentialHistoryEntry[]>([]);
   const [issuedState, setIssuedState] = useState<Record<CredentialKind, boolean>>({
@@ -76,6 +87,7 @@ export function App() {
   const [spendCapDaily, setSpendCapDaily] = useState("100 USDC");
   const [issuing, setIssuing] = useState<CredentialKind | null>(null);
   const [autoIssueRan, setAutoIssueRan] = useState(false);
+  const [viewerEntry, setViewerEntry] = useState<CredentialHistoryEntry | null>(null);
 
   const canContinue = useMemo(() => {
     switch (steps[stepIndex].id) {
@@ -133,7 +145,7 @@ export function App() {
       if (response.data.home) {
         setStorePath(response.data.home);
       }
-      const sorted = [...response.data.credentials].sort((a, b) => {
+      const sorted = [...(response.data.credentials as CredentialHistoryEntry[])].sort((a, b) => {
         const dateA = new Date(a.issuedAt ?? 0).getTime();
         const dateB = new Date(b.issuedAt ?? 0).getTime();
         return dateB - dateA;
@@ -207,17 +219,19 @@ export function App() {
   }, [downloadHref]);
 
   useEffect(() => {
-    refreshStatus();
-  }, []);
+    if (view === "wallet") {
+      refreshStatus();
+    }
+  }, [view]);
 
   useEffect(() => {
-    if (stepIndex < ISSUE_STEP_INDEX && autoIssueRan) {
+    if (view !== "wallet" || stepIndex < ISSUE_STEP_INDEX) {
       setAutoIssueRan(false);
     }
-  }, [stepIndex, autoIssueRan]);
+  }, [view, stepIndex]);
 
   useEffect(() => {
-    if (!showOnboarding || steps[stepIndex].id !== "issue" || autoIssueRan) {
+    if (view !== "wallet" || steps[stepIndex].id !== "issue" || autoIssueRan) {
       return;
     }
     setAutoIssueRan(true);
@@ -232,15 +246,20 @@ export function App() {
         }
       }
     })();
-  }, [showOnboarding, stepIndex, autoIssueRan, issuedState]);
+  }, [view, stepIndex, autoIssueRan, issuedState]);
 
-  if (!showOnboarding) {
+  if (view === "landing") {
     return (
       <LandingPage
-        onStart={() => setShowOnboarding(true)}
-        onLearn={() => window.open("https://agnic.id", "_blank")}
+      onStart={() => setView("wallet")}
+      onLearn={() => window.open("https://agnic.id", "_blank")}
+      onAgent={() => setView("agent")}
       />
     );
+  }
+
+  if (view === "agent") {
+    return <AgentIde onBack={() => setView("landing")} />;
   }
 
   return (
@@ -409,7 +428,7 @@ export function App() {
                         }
                       />
                       <DidSummary dids={walletStatus?.dids ?? []} />
-                      <CredentialHistory history={history} />
+                      <CredentialHistory history={history} onView={setViewerEntry} />
                     </div>
                   )}
 
@@ -474,11 +493,12 @@ export function App() {
           </div>
         </main>
       </div>
+      {viewerEntry && (
+        <CredentialJsonViewer entry={viewerEntry} onClose={() => setViewerEntry(null)} />
+      )}
     </div>
   );
 }
-
-const AGNIC_ID_HOME_LABEL = "~/.agnicid";
 
 function callToAction(
   stepId: (typeof steps)[number]["id"],
@@ -578,7 +598,13 @@ function DidSummary({ dids }: { dids: { alias: string; did: string }[] }) {
   );
 }
 
-function CredentialHistory({ history }: { history: CredentialHistoryEntry[] }) {
+function CredentialHistory({
+  history,
+  onView
+}: {
+  history: CredentialHistoryEntry[];
+  onView: (entry: CredentialHistoryEntry) => void;
+}) {
   if (!history.length) {
     return (
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
@@ -589,14 +615,313 @@ function CredentialHistory({ history }: { history: CredentialHistoryEntry[] }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
       <p className="text-sm font-semibold text-slate-700">Credential history</p>
-      <ul className="mt-3 space-y-2 text-xs text-slate-500">
+      <div className="mt-3 space-y-3 text-xs text-slate-500">
         {history.slice(0, 6).map((entry) => (
-          <li key={entry.path} className="flex items-center justify-between border-b border-slate-100 pb-2 last:border-b-0 last:pb-0">
-            <span className="capitalize text-slate-600">{entry.kind ?? entry.type}</span>
-            <span>{new Date(entry.issuedAt ?? entry.id ?? Date.now()).toLocaleString()}</span>
-          </li>
+          <div
+            key={entry.path}
+            className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2"
+          >
+            <div>
+              <p className="capitalize text-slate-700 text-sm font-semibold">
+                {entry.kind ?? entry.type}
+              </p>
+              <p>{new Date(entry.issuedAt ?? entry.id ?? Date.now()).toLocaleString()}</p>
+            </div>
+            <button
+              type="button"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-trustBlue transition hover:border-trustBlue"
+              onClick={() => onView(entry)}
+            >
+              View JSON
+            </button>
+          </div>
         ))}
-      </ul>
+      </div>
+    </div>
+  );
+}
+
+function CredentialJsonViewer({
+  entry,
+  onClose
+}: {
+  entry: CredentialHistoryEntry;
+  onClose: () => void;
+}) {
+  const jsonText = JSON.stringify(entry.payload ?? {}, null, 2);
+
+  const handleCopy = () => {
+    copyText(jsonText);
+  };
+
+  const handleDownload = () => {
+    const filename = `${(entry.kind ?? "credential").toLowerCase()}.vc.json`;
+    downloadJson(filename, jsonText);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
+      <div className="relative w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+        >
+          Close
+        </button>
+        <h3 className="text-lg font-semibold text-slate-800">
+          {entry.kind ?? entry.type} JSON
+        </h3>
+        <div className="mt-4 flex gap-3">
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-trustBlue hover:text-trustBlue"
+          >
+            Copy JSON
+          </button>
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-trustBlue hover:text-trustBlue"
+          >
+            Download
+          </button>
+        </div>
+        <pre className="mt-4 max-h-[60vh] overflow-auto rounded-xl bg-slate-900 p-4 text-xs text-slate-100">
+          {jsonText}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+function AgentIde({ onBack }: { onBack: () => void }) {
+  const [jobsUrl, setJobsUrl] = useState("http://localhost:8081/jobs");
+  const [events, setEvents] = useState<AgentTimelineEvent[]>([]);
+  const [displayEvents, setDisplayEvents] = useState<AgentTimelineEvent[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<any>(null);
+  const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
+  const timers = useRef<number[]>([]);
+  const logsEndRef = useRef<HTMLDivElement | null>(null);
+
+  const command = `agnicid x402:call ${jobsUrl} --bundle ~/.agnicid`;
+
+  useEffect(() => {
+    return () => {
+      timers.current.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, []);
+
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [displayEvents]);
+
+  const runAgent = async () => {
+    setIsRunning(true);
+    setError(null);
+    setResult(null);
+    setEvents([]);
+    setDisplayEvents([]);
+    timers.current.forEach((timer) => window.clearTimeout(timer));
+    timers.current = [];
+    try {
+      const response = await axios.post(`${API_BASE}/api/agent/run`, {
+        jobs: jobsUrl
+      });
+      const { events: eventLog, result } = response.data;
+      setEvents(eventLog);
+      setResult(result);
+      replayEvents(eventLog);
+    } catch (err) {
+      const fallbackEvents = (err as any)?.response?.data?.events ?? [];
+      if (fallbackEvents.length) {
+        setEvents(fallbackEvents);
+        replayEvents(fallbackEvents);
+      }
+      setError(extractError(err));
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  const replayEvents = (eventLog: AgentTimelineEvent[]) => {
+    setDisplayEvents([]);
+    eventLog.forEach((event, index) => {
+      const timer = window.setTimeout(() => {
+        setDisplayEvents((prev) => [...prev, event]);
+      }, index * 250);
+      timers.current.push(timer);
+    });
+  };
+
+  const docs = [
+    {
+      title: "1. Request",
+      detail: "Agent sends the original GET /jobs request without headers."
+    },
+    {
+      title: "2. 402 Challenge",
+      detail: "Seller responds with payment requirements and required claims."
+    },
+    {
+      title: "3. Sign payment",
+      detail: "Agent signs the payment payload via facilitator + wallet bundle."
+    },
+    {
+      title: "4. Compose VP",
+      detail: "JWT-VP contains Email, Age, Delegation credentials signed by Agent DID."
+    },
+    {
+      title: "5. Resubmit",
+      detail: "Same request sent with X-PAYMENT and X-PRESENTATION headers."
+    },
+    {
+      title: "6. Verify & settle",
+      detail: "Seller verifies payment, facilitator settles, policy checks pass, jobs returned."
+    }
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Agent IDE</p>
+            <h1 className="text-3xl font-semibold text-white">x402 Request Runner</h1>
+            <p className="text-sm text-slate-400">
+              Follow the request → 402 → resubmit cycle with live payloads and facilitator notes.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-900"
+          >
+            Back to Landing
+          </button>
+        </header>
+
+        <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+          <div className="space-y-6">
+            <section className="rounded-3xl bg-slate-900/70 p-6 shadow-2xl ring-1 ring-white/5">
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  type="text"
+                  value={jobsUrl}
+                  onChange={(event) => setJobsUrl(event.target.value)}
+                  className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-100 focus:border-trustBlue focus:outline-none focus:ring-2 focus:ring-trustBlue/30"
+                />
+                <button
+                  type="button"
+                  onClick={() => copyText(command)}
+                  className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-trustBlue"
+                >
+                  Copy Command
+                </button>
+                <button
+                  type="button"
+                  onClick={runAgent}
+                  disabled={isRunning}
+                  className="rounded-lg bg-trustBlue px-4 py-2 text-sm font-semibold text-white shadow hover:bg-trustBlue/90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {isRunning ? "Running…" : "Run Agent Flow"}
+                </button>
+              </div>
+              <pre className="mt-4 h-36 overflow-auto rounded-2xl border border-slate-800 bg-slate-950 p-4 font-mono text-xs text-emerald-300">{command}</pre>
+            </section>
+
+            <section className="rounded-3xl bg-slate-900/70 p-6 shadow-2xl ring-1 ring-white/5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
+                  Output Log
+                </h3>
+                <p className="text-xs text-slate-500">{displayEvents.length} events</p>
+              </div>
+              <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                {displayEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{event.label}</p>
+                        <p className="text-xs text-slate-500">
+                          {new Date(event.timestamp).toLocaleTimeString()} · {event.type}
+                        </p>
+                        {event.detail && (
+                          <p className="text-xs text-slate-400">{event.detail}</p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 hover:border-trustBlue"
+                        onClick={() =>
+                          setExpandedEvent((prev) => (prev === event.id ? null : event.id))
+                        }
+                      >
+                        {expandedEvent === event.id ? "Hide JSON" : "View JSON"}
+                      </button>
+                    </div>
+                    {expandedEvent === event.id && (
+                      <pre className="mt-3 overflow-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-200">
+                        {JSON.stringify(event.payload ?? {}, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+                <div ref={logsEndRef} />
+              </div>
+            </section>
+
+            {result && (
+              <section className="rounded-3xl bg-slate-900/70 p-6 shadow-2xl ring-1 ring-white/10">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
+                  Seller Response
+                </h3>
+                <p className="text-xs text-slate-500">Status {result.response.status}</p>
+                <div className="mt-4 space-y-2 text-sm text-slate-300">
+                  {(result.response.data?.jobs ?? []).map((job: any) => (
+                    <div
+                      key={job.id}
+                      className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3"
+                    >
+                      <p className="text-white">{job.title}</p>
+                      <p className="text-xs text-slate-400">{job.rate}</p>
+                      <p className="text-xs text-slate-500">{job.contact}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {error && (
+              <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+                {error}
+              </div>
+            )}
+          </div>
+
+          <aside className="space-y-4 rounded-3xl bg-slate-900/40 p-6 shadow-2xl ring-1 ring-white/10">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
+              Request / 402 / Resubmit
+            </h3>
+            <ol className="space-y-4 text-sm text-slate-300">
+              {docs.map((doc) => (
+                <li key={doc.title} className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                  <p className="text-white">{doc.title}</p>
+                  <p className="text-xs text-slate-400">{doc.detail}</p>
+                </li>
+              ))}
+            </ol>
+          </aside>
+        </div>
+      </div>
     </div>
   );
 }
@@ -625,12 +950,37 @@ const deriveIssuedState = (entries: CredentialHistoryEntry[]) => {
   return flags;
 };
 
+const copyText = async (value: string) => {
+  if (navigator?.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+};
+
+const downloadJson = (filename: string, content: string) => {
+  const blob = new Blob([content], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
 function LandingPage({
   onStart,
-  onLearn
+  onLearn,
+  onAgent
 }: {
   onStart: () => void;
   onLearn: () => void;
+  onAgent: () => void;
 }) {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#fefefe] via-[#f5f6fb] to-[#eaecf5] px-6 py-16">
@@ -658,6 +1008,13 @@ function LandingPage({
               className="rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:-translate-y-0.5 hover:border-trustBlue hover:text-trustBlue"
             >
               Learn about Agnic.ID
+            </button>
+            <button
+              type="button"
+              onClick={onAgent}
+              className="rounded-xl border border-slate-500 px-6 py-3 text-sm font-semibold text-slate-100 bg-slate-900 transition hover:-translate-y-0.5 hover:bg-slate-950"
+            >
+              Open Agent IDE
             </button>
           </div>
           <div className="flex items-center gap-4 text-xs text-slate-500">

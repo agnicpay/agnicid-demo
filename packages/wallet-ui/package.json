@@ -4,14 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm:dev:server\" \"vite\"",
-    "dev:server": "tsx --tsconfig tsconfig.server.json server/index.ts",
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:vite\"",
+    "dev:vite": "vite --host 127.0.0.1",
+    "dev:server": "concurrently \"npm:watch:server\" \"npm:serve:server\"",
+    "watch:server": "tsc -p tsconfig.server.json --watch --preserveWatchOutput",
+    "serve:server": "node ./scripts/start-dev-server.mjs",
     "build": "tsc -p tsconfig.json && vite build && tsc -p tsconfig.server.json",
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {
     "@agnicid/agent-sdk": "file:../agent-sdk",
+    "@agnicid/issuer-cli": "file:../issuer-cli",
     "adm-zip": "^0.5.12",
     "@headlessui/react": "^1.7.18",
     "axios": "^1.6.8",

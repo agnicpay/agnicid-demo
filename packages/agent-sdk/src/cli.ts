@@ -33,9 +33,16 @@ async function commandVpMake(argv: any) {
 
 async function commandX402Call(argv: any) {
   await ensureStore();
-  const result = await executeX402Flow(argv.jobs, {
-    includeDelegation: argv.includeDelegation !== false
-  });
+  const result = await executeX402Flow(
+    argv.jobs,
+    {
+      includeDelegation: argv.includeDelegation !== false
+    },
+    (event) => {
+      const message = event.detail ? ` – ${event.detail}` : "";
+      console.log(`[${event.type}] ${event.label}${message}`);
+    }
+  );
   logJson("Challenge", result.challenge);
   logJson("Payment envelope", result.paymentEnvelope);
   logJson("Seller response", result.response);

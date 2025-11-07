@@ -15,16 +15,16 @@
         padding: 24px;
       }
       .shell {
-        max-width: 960px;
+        max-width: 1100px;
         margin: 0 auto;
         display: grid;
         gap: 24px;
       }
       .card {
         background: white;
-        border-radius: 18px;
+        border-radius: 20px;
         padding: 24px;
-        box-shadow: 0 12px 40px rgba(27, 31, 36, 0.08);
+        box-shadow: 0 16px 50px rgba(27, 31, 36, 0.08);
         border: 1px solid rgba(46, 119, 208, 0.12);
       }
       h1 {
@@ -57,10 +57,51 @@
       button:hover {
         filter: brightness(0.95);
       }
+      .status-line {
+        font-size: 13px;
+        color: #475569;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .status-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        background: #cbd5f5;
+      }
+      .status-dot.online {
+        background: #2ad49a;
+        box-shadow: 0 0 0 4px rgba(42, 212, 154, 0.2);
+      }
+      .tab-bar {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .tab {
+        flex: 1;
+        border-radius: 12px;
+        border: 1px solid rgba(30, 41, 59, 0.12);
+        background: transparent;
+        color: #475569;
+        font-weight: 600;
+      }
+      .tab.active {
+        background: #2e77d0;
+        border-color: #2e77d0;
+        color: white;
+      }
+      .tab-panel {
+        display: none;
+      }
+      .tab-panel.active {
+        display: block;
+      }
       .log-list {
         display: grid;
         gap: 12px;
-        max-height: 480px;
+        max-height: 420px;
         overflow-y: auto;
       }
       .log-item {
@@ -96,30 +137,34 @@
         background: rgba(239, 68, 68, 0.15);
         color: #dc2626;
       }
-      .log-detail {
-        font-size: 13px;
-        color: #475569;
-      }
-      .toggle-row {
-        display: flex;
+      .raw-list,
+      .panel {
+        display: grid;
         gap: 12px;
-        align-items: center;
       }
-      .status-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 999px;
-        margin-right: 8px;
+      .raw-card {
+        border-radius: 12px;
+        border: 1px solid rgba(30, 41, 59, 0.12);
+        background: #f1f5f9;
+        padding: 16px;
       }
-      .status-dot.online {
-        background: #2ad49a;
-        box-shadow: 0 0 0 4px rgba(42, 212, 154, 0.2);
+      .raw-card pre {
+        margin-top: 8px;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 12px;
+        border-radius: 10px;
+        max-height: 200px;
+        overflow: auto;
       }
-      .status-line {
-        font-size: 13px;
-        color: #475569;
-        display: flex;
-        align-items: center;
+      .panel-note {
+        border-radius: 12px;
+        border: 1px solid rgba(30, 41, 59, 0.12);
+        background: #f8fafc;
+        padding: 16px;
+      }
+      .hidden {
+        display: none;
       }
     </style>
   </head>
@@ -139,7 +184,7 @@
 
       <section class="card">
         <h2>Policy Controls</h2>
-        <div class="toggle-row">
+        <div class="toggle-row" style="display: flex; gap: 12px; align-items: center;">
           <button id="toggle-button" class="secondary">Enable Under-18 Failure</button>
           <span id="toggle-label" style="font-size: 13px; color: #475569;">
             Current: Allowing over-18 claims
@@ -147,21 +192,69 @@
         </div>
       </section>
 
-      <section class="card">
-        <h2>Verification Timeline</h2>
-        <div id="log-list" class="log-list"></div>
+      <section class="card console-card">
+        <div class="tab-bar">
+          <button class="tab active" data-tab="timeline">Timeline</button>
+          <button class="tab" data-tab="raw">Raw</button>
+          <button class="tab" data-tab="facilitator">Facilitator</button>
+          <button class="tab" data-tab="policy">Policy</button>
+        </div>
+        <div id="tab-timeline" class="tab-panel active">
+          <div id="log-list" class="log-list"></div>
+        </div>
+        <div id="tab-raw" class="tab-panel">
+          <div id="raw-list" class="raw-list"></div>
+        </div>
+        <div id="tab-facilitator" class="tab-panel">
+          <div id="facilitator-panel" class="panel-note">No facilitator events yet.</div>
+        </div>
+        <div id="tab-policy" class="tab-panel">
+          <div id="policy-panel" class="panel-note">Policy evaluation will appear here.</div>
+        </div>
       </section>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
+      const state = {
+        logs: [],
+        rawEntries: [],
+        facilitator: null,
+        policy: null
+      };
+
       const logList = document.getElementById("log-list");
+      const rawList = document.getElementById("raw-list");
+      const facilitatorPanel = document.getElementById("facilitator-panel");
+      const policyPanel = document.getElementById("policy-panel");
+
       const toggleBtn = document.getElementById("toggle-button");
       const toggleLabel = document.getElementById("toggle-label");
       const statusText = document.getElementById("status-text");
       const socketDot = document.getElementById("socket-dot");
+      const tabButtons = document.querySelectorAll("[data-tab]");
+      const tabPanels = {
+        timeline: document.getElementById("tab-timeline"),
+        raw: document.getElementById("tab-raw"),
+        facilitator: document.getElementById("tab-facilitator"),
+        policy: document.getElementById("tab-policy")
+      };
 
       let forceUnder18 = false;
+
+      tabButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const tab = button.getAttribute("data-tab");
+          setActiveTab(tab);
+        });
+      });
+
+      function setActiveTab(tab) {
+        tabButtons.forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-tab") === tab));
+        Object.entries(tabPanels).forEach(([key, panel]) => {
+          panel.classList.toggle("active", key === tab);
+        });
+      }
 
       function setSocketStatus(connected) {
         statusText.textContent = connected ? "Live updates connected" : "Waiting for connection…";
@@ -176,39 +269,144 @@
         toggleBtn.className = forceUnder18 ? "secondary" : "";
       }
 
-      function renderLog(log) {
-        const item = document.createElement("div");
-        item.className = "log-item";
+      function setLogs(logs) {
+        state.logs = [...logs].sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        state.rawEntries = [];
+        state.facilitator = null;
+        state.policy = null;
+        state.logs.forEach((log) => applyMeta(log));
+        renderTimeline();
+        renderRaw();
+        renderFacilitator();
+        renderPolicy();
+      }
 
-        const header = document.createElement("div");
-        header.className = "log-header";
-        header.innerHTML = `
-          <span>${log.step}</span>
-          <span class="badge ${log.status}">${log.status.toUpperCase()}</span>
+      function applyMeta(log) {
+      const meta = log.meta || {};
+        if (meta.raw) {
+          state.rawEntries = [
+            {
+              ...meta.raw,
+              step: log.step,
+              timestamp: log.timestamp
+            },
+            ...state.rawEntries
+          ].slice(0, 8);
+        }
+        if (log.step === "payment.facilitator" && meta.settlement) {
+          state.facilitator = meta.settlement;
+        }
+        if (log.step === "policy.eval") {
+          state.policy = meta;
+        }
+      }
+
+      function renderTimeline() {
+        logList.innerHTML = "";
+        state.logs.forEach((log) => {
+          const item = document.createElement("div");
+          item.className = "log-item";
+
+          const header = document.createElement("div");
+          header.className = "log-header";
+          header.innerHTML = `
+            <span>${log.step}</span>
+            <span class="badge ${log.status}">${log.status.toUpperCase()}</span>
+          `;
+
+          const detail = document.createElement("div");
+          detail.className = "log-detail";
+          detail.innerHTML = `
+            <div>${log.detail}</div>
+            <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">
+              ${new Date(log.timestamp).toLocaleTimeString()} · ${log.challengeId}
+            </div>
+          `;
+
+          item.appendChild(header);
+          item.appendChild(detail);
+          logList.appendChild(item);
+        });
+      }
+
+      function renderRaw() {
+        if (!state.rawEntries.length) {
+          rawList.innerHTML = '<div class="panel-note">No raw HTTP data yet.</div>';
+          return;
+        }
+        rawList.innerHTML = "";
+        state.rawEntries.forEach((entry) => {
+          const card = document.createElement("div");
+          card.className = "raw-card";
+          const title = entry.direction === "request" ? "Request" : "Response";
+          card.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <p style="margin:0;font-weight:600;">${title}</p>
+                <p style="margin:0;font-size:12px;color:#475569;">${new Date(entry.timestamp).toLocaleTimeString()}</p>
+              </div>
+              ${entry.status ? `<span class="badge info">Status ${entry.status}</span>` : ""}
+            </div>
+            ${entry.headers ? `<pre>${JSON.stringify(entry.headers, null, 2)}</pre>` : ""}
+            ${entry.body ? `<pre>${JSON.stringify(entry.body, null, 2)}</pre>` : ""}
+          `;
+          rawList.appendChild(card);
+        });
+      }
+
+      function renderFacilitator() {
+        if (!state.facilitator) {
+          facilitatorPanel.textContent = "No facilitator events yet.";
+          return;
+        }
+        facilitatorPanel.innerHTML = `
+          <p style="margin:0;font-weight:600;">Settlement</p>
+          <p style="margin:0;font-size:13px;color:#475569;">Status: ${state.facilitator.status}</p>
+          <p style="margin:0;font-size:13px;color:#475569;">TxID: ${state.facilitator.txId}</p>
+          <p style="margin:0;font-size:13px;color:#475569;">Settled At: ${state.facilitator.settledAt}</p>
         `;
+      }
 
-        const detail = document.createElement("div");
-        detail.className = "log-detail";
-        detail.innerHTML = `
-          <div>${log.detail}</div>
-          <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">
-            ${new Date(log.timestamp).toLocaleTimeString()} · ${log.challengeId}
-          </div>
-        `;
-
-        item.appendChild(header);
-        item.appendChild(detail);
-        logList.prepend(item);
+      function renderPolicy() {
+        if (!state.policy) {
+          policyPanel.textContent = "Policy evaluation will appear here.";
+          return;
+        }
+        const rows = [
+          { label: "email_verified", value: state.policy.email_verified ? "Pass" : "Fail" },
+          { label: "age_over_18", value: state.policy.age_over_18 ? "Pass" : "Fail" },
+          {
+            label: "holder matches delegation",
+            value: state.policy.holderMatchesDelegation ? "Pass" : "Fail"
+          },
+          {
+            label: "owner email matches",
+            value: state.policy.delegationOwnerMatches ? "Pass" : "Fail"
+          },
+          {
+            label: "Under-18 toggle",
+            value: forceUnder18 ? "Reject (demo)" : "Allow"
+          }
+        ];
+        policyPanel.innerHTML = rows
+          .map(
+            (row) =>
+              `<div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <span style="font-size:13px;color:#475569;">${row.label}</span>
+                <strong style="font-size:13px;">${row.value}</strong>
+              </div>`
+          )
+          .join("");
       }
 
       async function fetchState() {
         const response = await fetch("/console/state");
-        const state = await response.json();
-        forceUnder18 = state.forceUnder18;
+        const data = await response.json();
+        forceUnder18 = data.forceUnder18;
         updateToggleLabel();
-        logList.innerHTML = "";
-        state.logs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        state.logs.forEach(renderLog);
+        setLogs(data.logs || []);
       }
 
       toggleBtn.addEventListener("click", async () => {
@@ -224,13 +422,23 @@
       const socket = io();
       socket.on("connect", () => setSocketStatus(true));
       socket.on("disconnect", () => setSocketStatus(false));
-      socket.on("log", (log) => renderLog(log));
-      socket.on("state", (state) => {
-        forceUnder18 = state.forceUnder18;
-        updateToggleLabel();
-        logList.innerHTML = "";
-        state.logs.forEach(renderLog);
+      socket.on("log", (log) => {
+        ingestLog(log);
       });
+      socket.on("state", (serverState) => {
+        forceUnder18 = serverState.forceUnder18;
+        updateToggleLabel();
+        setLogs(serverState.logs || []);
+      });
+
+      function ingestLog(log) {
+        state.logs = [log, ...state.logs].slice(0, 200);
+        applyMeta(log);
+        renderTimeline();
+        renderRaw();
+        renderFacilitator();
+        renderPolicy();
+      }
 
       fetchState().catch(() => {
         // ignore for offline start

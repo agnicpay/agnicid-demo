@@ -21,6 +21,7 @@ export interface VerificationLog {
   status: LogStatus;
   detail: string;
   timestamp: string;
+  meta?: Record<string, unknown>;
 }
 
 export interface ConsoleState {

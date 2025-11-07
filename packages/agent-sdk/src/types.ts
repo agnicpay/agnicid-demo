@@ -88,3 +88,12 @@ export interface PaymentResponse {
   txId: string;
   settledAt: string;
 }
+
+export interface AgentEvent {
+  id: string;
+  type: string;
+  label: string;
+  detail?: string;
+  payload?: Record<string, unknown>;
+  timestamp: string;
+}

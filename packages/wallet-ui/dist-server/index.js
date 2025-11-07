@@ -3,7 +3,7 @@ import cors from "cors";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import AdmZip from "adm-zip";
-import { listStoredCredentials } from "@agnicid/agent-sdk";
+import { listStoredCredentials, executeX402Flow } from "@agnicid/agent-sdk";
 import { AGNIC_ID_HOME, ensureStore, ensureDid, ensureKeypair, issueAgeCredential, issueDelegationCredential, issueEmailCredential, KEY_ALIASES, resolveStorePath } from "@agnicid/issuer-cli";
 const PORT = parseInt(process.env.WALLET_API_PORT ?? "8787", 10);
 const app = express();
@@ -78,6 +78,18 @@ app.post("/api/credentials/delegation", asyncHandler(async (req, res) => {
         spendCapDaily
     });
     res.json(result.stored);
+}));
+app.post("/api/agent/run", asyncHandler(async (req, res) => {
+    await ensureStore();
+    const { jobs = "http://localhost:8081/jobs", includeDelegation = true } = req.body ?? {};
+    const events = [];
+    try {
+        const result = await executeX402Flow(jobs, { includeDelegation }, (event) => events.push(event));
+        res.json({ result, events });
+    }
+    catch (error) {
+        res.status(400).json({ error: error.message, events });
+    }
 }));
 app.post("/api/enroll", asyncHandler(async (req, res) => {
     const { email, birthDate, spendCapDaily } = req.body;

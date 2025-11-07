@@ -46,14 +46,21 @@ const emitLog = (log: VerificationLog) => {
   io.emit("log", log);
 };
 
-const recordLog = (challengeId: string, step: string, status: VerificationLog["status"], detail: string) => {
+const recordLog = (
+  challengeId: string,
+  step: string,
+  status: VerificationLog["status"],
+  detail: string,
+  meta?: Record<string, unknown>
+) => {
   const log: VerificationLog = {
     id: nanoid(10),
     challengeId,
     step,
     status,
     detail,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    meta
   };
   emitLog(log);
 };
@@ -81,7 +88,6 @@ app.get("/jobs", async (req, res) => {
 
   if (!paymentHeader || !presentationHeader) {
     const challenge = buildChallenge();
-    recordLog(challenge.challengeId, "challenge.issued", "info", "HTTP 402 challenge issued");
     const payload = {
       challengeId: challenge.challengeId,
       amount: challenge.amount,
@@ -89,6 +95,13 @@ app.get("/jobs", async (req, res) => {
       claims: challenge.claims,
       vpFormat: challenge.vpFormat
     };
+    recordLog(challenge.challengeId, "challenge.issued", "info", "HTTP 402 challenge issued", {
+      raw: {
+        direction: "response",
+        status: 402,
+        body: payload
+      }
+    });
     return res
       .status(402)
       .set("X-PAYMENT-REQUIRED", encodeBase64Url(payload))
@@ -103,22 +116,54 @@ app.get("/jobs", async (req, res) => {
       return res.status(400).json({ error: "UNKNOWN_CHALLENGE" });
     }
 
-    recordLog(challenge.challengeId, "payment.received", "info", "Payment envelope received");
+    recordLog(challenge.challengeId, "raw.request", "info", "Authenticated request received", {
+      raw: {
+        direction: "request",
+        headers: {
+          "x-payment": paymentHeader.slice(0, 80) + "...",
+          "x-presentation": presentationHeader.slice(0, 80) + "..."
+        }
+      }
+    });
+
+    recordLog(challenge.challengeId, "payment.received", "info", "Payment envelope received", {
+      envelope: {
+        kid: paymentEnvelope.kid,
+        payer: paymentEnvelope.payload.payer
+      }
+    });
 
     await verifyPaymentSignature(paymentEnvelope);
-    recordLog(challenge.challengeId, "payment.signature", "success", "Payment signature verified");
+    recordLog(
+      challenge.challengeId,
+      "payment.signature",
+      "success",
+      "Payment signature verified",
+      {
+        kid: paymentEnvelope.kid,
+        payer: paymentEnvelope.payload.payer
+      }
+    );
 
     const settlement = verifyPaymentWithFacilitator(challenge, paymentEnvelope);
     challenge.settlement = {
       txId: settlement.txId,
       settledAt: settlement.settledAt
     };
-    recordLog(challenge.challengeId, "payment.facilitator", "success", "Facilitator settled payment");
+    recordLog(
+      challenge.challengeId,
+      "payment.facilitator",
+      "success",
+      "Facilitator settled payment",
+      {
+        settlement
+      }
+    );
 
     const outcome = await verifyPresentation(
       presentationHeader,
       challenge,
-      (step, status, detail) => recordLog(challenge.challengeId, step, status, detail),
+      (step, status, detail, meta) => recordLog(challenge.challengeId, step, status, detail, meta),
       forceUnder18,
       origin
     );
@@ -140,7 +185,19 @@ app.get("/jobs", async (req, res) => {
       ]
     };
 
-    recordLog(challenge.challengeId, "redeem.success", "success", "Proof validated and resource served");
+    recordLog(
+      challenge.challengeId,
+      "redeem.success",
+      "success",
+      "Proof validated and resource served",
+      {
+        raw: {
+          direction: "response",
+          status: 200,
+          body: responsePayload
+        }
+      }
+    );
 
     const paymentResponseHeader = encodeBase64Url<SettlementResult>({
       status: settlement.status,
@@ -156,7 +213,9 @@ app.get("/jobs", async (req, res) => {
       (typeof error === "object" && error !== null && "payload" in (error as any)
         ? (error as any).payload?.challengeId
         : "unknown");
-    recordLog(challengeId, mapped.step, "error", mapped.detail);
+    recordLog(challengeId, mapped.step, "error", mapped.detail, {
+      error: messageFromError(error)
+    });
     return res.status(mapped.status).json({ error: mapped.code, detail: mapped.detail });
   }
 });
@@ -233,6 +292,8 @@ const mapVerificationError = (error: unknown) => {
   }
   return { status: 400, code: "INVALID_PROOF", detail: message, step: "vp.error" };
 };
+
+const messageFromError = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const decodePaymentEnvelope = (header: string): PaymentEnvelope => {
   try {
