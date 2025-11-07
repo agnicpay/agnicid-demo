@@ -5,8 +5,16 @@ import { createServer } from "node:http";
 import { Server as SocketIOServer } from "socket.io";
 import { nanoid } from "nanoid";
 import { fileURLToPath } from "node:url";
+import nacl from "tweetnacl";
+import { fromBase58, did as sharedDid } from "@agnicid/shared";
+import type { DidDocument } from "@agnicid/shared";
 import { verifyPresentation } from "./verification.js";
-import type { Challenge, ConsoleState, PaymentProof, VerificationLog } from "./types.js";
+import {
+  verifyPaymentWithFacilitator,
+  type PaymentEnvelope,
+  type SettlementResult
+} from "./facilitator.js";
+import type { Challenge, ConsoleState, VerificationLog } from "./types.js";
 
 const PORT = parseInt(process.env.SELLER_PORT ?? "8081", 10);
 const BASE_AMOUNT = "0.01";
@@ -50,89 +58,69 @@ const recordLog = (challengeId: string, step: string, status: VerificationLog["s
   emitLog(log);
 };
 
-const buildChallenge = (req: express.Request): Challenge => {
-  const origin = `${req.protocol}://${req.get("host")}`;
+const buildChallenge = (): Challenge => {
   const challengeId = `c-${nanoid(6)}`;
-  return {
+  const challenge: Challenge = {
     challengeId,
     amount: BASE_AMOUNT,
     asset: BASE_ASSET,
     claims: CLAIMS,
     vpFormat: "jwt_vp",
-    paymentEndpoint: `${origin}/pay`,
-    acceptEndpoint: `${origin}/redeem`,
     createdAt: new Date().toISOString(),
-    forceUnder18,
-    paymentProof: undefined
+    forceUnder18
   };
+  challenges.set(challengeId, challenge);
+  return challenge;
 };
 
-app.get("/jobs", (req, res) => {
-  const challenge = buildChallenge(req);
-  challenges.set(challenge.challengeId, challenge);
-  recordLog(challenge.challengeId, "challenge.issued", "info", "HTTP 402 challenge issued");
-  res.status(402).json({
-    challengeId: challenge.challengeId,
-    amount: challenge.amount,
-    asset: challenge.asset,
-    claims: challenge.claims,
-    vpFormat: challenge.vpFormat,
-    paymentEndpoint: challenge.paymentEndpoint,
-    acceptEndpoint: challenge.acceptEndpoint
-  });
-});
+app.get("/jobs", async (req, res) => {
+  const paymentHeader = req.get("X-PAYMENT");
+  const presentationHeader = req.get("X-PRESENTATION");
 
-app.post("/pay", (req, res) => {
-  const challengeId = req.body?.challengeId;
-  const amount = req.body?.amount;
-  const asset = req.body?.asset;
-  if (!challengeId || !amount || !asset) {
-    return res.status(400).json({ error: "Invalid payment request" });
-  }
-  const challenge = challenges.get(challengeId);
-  if (!challenge) {
-    return res.status(404).json({ error: "Unknown challenge" });
-  }
-  if (challenge.amount !== amount || challenge.asset !== asset) {
-    recordLog(challengeId, "payment.error", "error", "Payment amount or asset mismatch");
-    return res.status(402).json({ error: "PAYMENT_REQUIRED" });
-  }
-  const paymentProof: PaymentProof = {
-    txId: `tx-${nanoid(8)}`,
-    amount,
-    asset
-  };
-  challenge.paymentProof = paymentProof;
-  recordLog(challengeId, "payment.accepted", "success", `Payment accepted with txId ${paymentProof.txId}`);
-  res.json(paymentProof);
-});
+  const origin = `${req.protocol}://${req.get("host")}`;
 
-app.post("/redeem", async (req, res) => {
-  const { challengeId, paymentProof, vp_jwt: vpJwt } = req.body ?? {};
-  if (!challengeId || !vpJwt) {
-    return res.status(400).json({ error: "INVALID_REQUEST" });
-  }
-  const challenge = challenges.get(challengeId);
-  if (!challenge) {
-    return res.status(404).json({ error: "UNKNOWN_CHALLENGE" });
-  }
-
-  if (!challenge.paymentProof) {
-    recordLog(challengeId, "payment.missing", "error", "No payment proof on record");
-    return res.status(402).json({ error: "PAYMENT_REQUIRED" });
-  }
-
-  if (!isMatchingPayment(paymentProof, challenge.paymentProof)) {
-    recordLog(challengeId, "payment.mismatch", "error", "Payment proof mismatch");
-    return res.status(402).json({ error: "PAYMENT_REQUIRED" });
+  if (!paymentHeader || !presentationHeader) {
+    const challenge = buildChallenge();
+    recordLog(challenge.challengeId, "challenge.issued", "info", "HTTP 402 challenge issued");
+    const payload = {
+      challengeId: challenge.challengeId,
+      amount: challenge.amount,
+      asset: challenge.asset,
+      claims: challenge.claims,
+      vpFormat: challenge.vpFormat
+    };
+    return res
+      .status(402)
+      .set("X-PAYMENT-REQUIRED", encodeBase64Url(payload))
+      .json(payload);
   }
 
   try {
+    const paymentEnvelope = decodePaymentEnvelope(paymentHeader);
+    const challenge = challenges.get(paymentEnvelope.payload.challengeId);
+
+    if (!challenge) {
+      return res.status(400).json({ error: "UNKNOWN_CHALLENGE" });
+    }
+
+    recordLog(challenge.challengeId, "payment.received", "info", "Payment envelope received");
+
+    await verifyPaymentSignature(paymentEnvelope);
+    recordLog(challenge.challengeId, "payment.signature", "success", "Payment signature verified");
+
+    const settlement = verifyPaymentWithFacilitator(challenge, paymentEnvelope);
+    challenge.settlement = {
+      txId: settlement.txId,
+      settledAt: settlement.settledAt
+    };
+    recordLog(challenge.challengeId, "payment.facilitator", "success", "Facilitator settled payment");
+
     const outcome = await verifyPresentation(
-      vpJwt,
+      presentationHeader,
       challenge,
-      (step, status, detail) => recordLog(challengeId, step, status, detail),
-      forceUnder18
+      (step, status, detail) => recordLog(challenge.challengeId, step, status, detail),
+      forceUnder18,
+      origin
     );
 
     const responsePayload = {
@@ -151,12 +139,25 @@ app.post("/redeem", async (req, res) => {
         }
       ]
     };
-    recordLog(challengeId, "redeem.success", "success", "Proof validated and resource served");
-    res.json(responsePayload);
+
+    recordLog(challenge.challengeId, "redeem.success", "success", "Proof validated and resource served");
+
+    const paymentResponseHeader = encodeBase64Url<SettlementResult>({
+      status: settlement.status,
+      txId: settlement.txId,
+      settledAt: settlement.settledAt
+    });
+
+    return res.status(200).set("X-PAYMENT-RESPONSE", paymentResponseHeader).json(responsePayload);
   } catch (error) {
     const mapped = mapVerificationError(error);
+    const challengeId =
+      (error as any)?.challengeId ??
+      (typeof error === "object" && error !== null && "payload" in (error as any)
+        ? (error as any).payload?.challengeId
+        : "unknown");
     recordLog(challengeId, mapped.step, "error", mapped.detail);
-    res.status(mapped.status).json({ error: mapped.code });
+    return res.status(mapped.status).json({ error: mapped.code, detail: mapped.detail });
   }
 });
 
@@ -204,14 +205,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 export default httpServer;
 
-const isMatchingPayment = (submitted: PaymentProof, stored: PaymentProof) => {
-  return (
-    submitted?.amount === stored.amount &&
-    submitted?.asset === stored.asset &&
-    submitted?.txId === stored.txId
-  );
-};
-
 const mapVerificationError = (error: unknown) => {
   const message = error instanceof Error ? error.message : "Verification error";
   if (message.includes("Under-18") || message.includes("Age policy")) {
@@ -235,5 +228,60 @@ const mapVerificationError = (error: unknown) => {
   if (message.includes("expired") || (error as any)?.code === "ERR_JWT_EXPIRED") {
     return { status: 401, code: "VP_EXPIRED", detail: message, step: "vp.expiry" };
   }
+  if (message.includes("signature")) {
+    return { status: 401, code: "PAYMENT_SIGNATURE_INVALID", detail: message, step: "payment.signature" };
+  }
   return { status: 400, code: "INVALID_PROOF", detail: message, step: "vp.error" };
+};
+
+const decodePaymentEnvelope = (header: string): PaymentEnvelope => {
+  try {
+    const json = Buffer.from(header, "base64url").toString("utf-8");
+    return JSON.parse(json) as PaymentEnvelope;
+  } catch (error) {
+    (error as any).challengeId = "unknown";
+    throw new Error("Invalid payment envelope");
+  }
+};
+
+const encodeBase64Url = <T>(payload: T) =>
+  Buffer.from(JSON.stringify(payload), "utf-8").toString("base64url");
+
+const verifyPaymentSignature = async (envelope: PaymentEnvelope) => {
+  const { payload, signature, kid } = envelope;
+  if (!kid) {
+    const err: any = new Error("Payment signature missing kid");
+    err.challengeId = payload.challengeId;
+    throw err;
+  }
+  const did = payload.payer;
+  if (!did) {
+    const err: any = new Error("Payment payload missing payer");
+    err.challengeId = payload.challengeId;
+    throw err;
+  }
+
+  const document = (await sharedDid.loadDidDocument(did)) as DidDocument | null;
+  if (!document) {
+    const err: any = new Error(`Unknown payer DID: ${did}`);
+    err.challengeId = payload.challengeId;
+    throw err;
+  }
+  const method =
+    document.verificationMethod.find((item) => item.id === kid) ?? document.verificationMethod[0];
+  if (!method) {
+    const err: any = new Error(`No verification method for DID ${did}`);
+    err.challengeId = payload.challengeId;
+    throw err;
+  }
+  const publicKey = fromBase58(method.publicKeyBase58);
+  const signatureBytes = Buffer.from(signature, "base64url");
+  const message = new TextEncoder().encode(JSON.stringify(payload));
+
+  const verified = nacl.sign.detached.verify(message, signatureBytes, publicKey);
+  if (!verified) {
+    const err: any = new Error("Payment signature verification failed");
+    err.challengeId = payload.challengeId;
+    throw err;
+  }
 };

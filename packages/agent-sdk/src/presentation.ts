@@ -3,8 +3,8 @@ import path from "node:path";
 import { promises as fs } from "node:fs";
 import { resolveAgnicIdPath } from "@agnicid/shared";
 import { importEd25519Key, signJwt } from "./crypto.js";
-import { ensureDid, getVerificationMethodId } from "./did.js";
-import { ensureKeypair } from "./keys.js";
+import { getVerificationMethodId, requireDid } from "./did.js";
+import { requireKeypair } from "./keys.js";
 
 export interface PresentationInput {
   credentials: string[];
@@ -20,8 +20,8 @@ export interface PresentationResult {
 const VP_CONTEXT = ["https://www.w3.org/2018/credentials/v1"];
 
 export const createPresentation = async (input: PresentationInput): Promise<PresentationResult> => {
-  const agentDid = await ensureDid("agent");
-  const agentKey = await ensureKeypair("agent");
+  const agentDid = await requireDid("agent");
+  const agentKey = await requireKeypair("agent");
   const kid = getVerificationMethodId(agentDid);
 
   const key = await importEd25519Key({

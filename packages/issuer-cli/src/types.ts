@@ -1,8 +1,3 @@
-export interface CredentialStatus {
-  id: string;
-  type: string;
-}
-
 export interface BaseCredentialSubject {
   id: string;
 }
@@ -56,35 +51,4 @@ export interface StoredCredential<T extends BaseCredentialSubject = BaseCredenti
   issuedAt: string;
   path: string;
   kind?: string;
-}
-
-export interface X402Challenge {
-  challengeId: string;
-  amount: string;
-  asset: string;
-  claims: string[];
-  vpFormat: "jwt_vp";
-  nonce?: string;
-}
-
-export interface PaymentPayload {
-  challengeId: string;
-  amount: string;
-  asset: string;
-  payer: string;
-  nonce: string;
-  timestamp: string;
-}
-
-export interface PaymentEnvelope {
-  payload: PaymentPayload;
-  signature: string;
-  kid: string;
-  txId?: string;
-}
-
-export interface PaymentResponse {
-  status: "settled" | "rejected";
-  txId: string;
-  settledAt: string;
 }

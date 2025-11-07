@@ -3,7 +3,8 @@ import cors from "cors";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import AdmZip from "adm-zip";
-import { AGNIC_ID_HOME, ensureStore, ensureDid, ensureKeypair, issueAgeCredential, issueDelegationCredential, issueEmailCredential, KEY_ALIASES, listStoredCredentials, resolveStorePath } from "@agnicid/agent-sdk";
+import { listStoredCredentials } from "@agnicid/agent-sdk";
+import { AGNIC_ID_HOME, ensureStore, ensureDid, ensureKeypair, issueAgeCredential, issueDelegationCredential, issueEmailCredential, KEY_ALIASES, resolveStorePath } from "@agnicid/issuer-cli";
 const PORT = parseInt(process.env.WALLET_API_PORT ?? "8787", 10);
 const app = express();
 app.use(cors());
@@ -25,13 +26,61 @@ app.get("/api/status", asyncHandler(async (_req, res) => {
     }));
     const credentials = await listStoredCredentials();
     res.json({
+        home: AGNIC_ID_HOME,
         keys,
         dids,
         credentials
     });
 }));
+app.get("/api/credentials", asyncHandler(async (_req, res) => {
+    await ensureStore();
+    const credentials = await listStoredCredentials();
+    res.json(credentials);
+}));
+app.post("/api/credentials/email", asyncHandler(async (req, res) => {
+    const { email, emailVerified = true } = req.body;
+    if (!email) {
+        return res.status(400).json({ error: "email is required" });
+    }
+    await ensureStore();
+    const humanDid = await ensureDid("human");
+    const result = await issueEmailCredential({
+        subjectDid: humanDid.id,
+        email,
+        emailVerified
+    });
+    res.json(result.stored);
+}));
+app.post("/api/credentials/age", asyncHandler(async (req, res) => {
+    const { birthDate } = req.body;
+    if (!birthDate) {
+        return res.status(400).json({ error: "birthDate is required" });
+    }
+    await ensureStore();
+    const humanDid = await ensureDid("human");
+    const result = await issueAgeCredential({
+        subjectDid: humanDid.id,
+        birthDate
+    });
+    res.json(result.stored);
+}));
+app.post("/api/credentials/delegation", asyncHandler(async (req, res) => {
+    const { ownerEmail, spendCapDaily } = req.body;
+    if (!ownerEmail) {
+        return res.status(400).json({ error: "ownerEmail is required" });
+    }
+    await ensureStore();
+    const [humanDid, agentDid] = await Promise.all([ensureDid("human"), ensureDid("agent")]);
+    const result = await issueDelegationCredential({
+        ownerDid: humanDid.id,
+        agentDid: agentDid.id,
+        ownerEmail,
+        spendCapDaily
+    });
+    res.json(result.stored);
+}));
 app.post("/api/enroll", asyncHandler(async (req, res) => {
-    const { email, birthDate } = req.body;
+    const { email, birthDate, spendCapDaily } = req.body;
     if (!email) {
         return res.status(400).json({ error: "email is required" });
     }
@@ -54,7 +103,8 @@ app.post("/api/enroll", asyncHandler(async (req, res) => {
     const delegationVc = await issueDelegationCredential({
         ownerDid: humanDid.id,
         agentDid: agentDid.id,
-        ownerEmail: email
+        ownerEmail: email,
+        spendCapDaily
     });
     res.json({
         humanDid: humanDid.id,

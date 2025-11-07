@@ -73,13 +73,11 @@ const createBaseCredential = <TSubject extends BaseCredentialSubject>(
 
 const signCredential = async ({
   credential,
-  kind,
   kid,
   signerPublicKey,
   signerSecretKey
 }: {
   credential: EmailCredential | AgeCredential | AgentDelegationCredential;
-  kind: CredentialKind;
   kid: string;
   signerPublicKey: string;
   signerSecretKey: string;
@@ -110,7 +108,7 @@ const signCredential = async ({
     jwt
   };
 
-  const stored = await persistCredential(kind, credential, jwt);
+  const stored = await persistCredential(credential.type[1] as CredentialKind, credential, jwt);
   return {
     jwt,
     credential,
@@ -137,7 +135,6 @@ export const issueEmailCredential = async (input: {
 
   return signCredential({
     credential,
-    kind: "email",
     kid,
     signerPublicKey: issuerKey.publicKey,
     signerSecretKey: issuerKey.secretKey
@@ -168,7 +165,6 @@ export const issueAgeCredential = async (input: {
 
   return signCredential({
     credential,
-    kind: "age",
     kid,
     signerPublicKey: issuerKey.publicKey,
     signerSecretKey: issuerKey.secretKey
@@ -179,6 +175,7 @@ export const issueDelegationCredential = async (input: {
   ownerDid: string;
   agentDid: string;
   ownerEmail: string;
+  spendCapDaily?: string;
 }) => {
   const humanDid = await ensureDid("human");
   const humanKey = await ensureKeypair("human");
@@ -188,7 +185,7 @@ export const issueDelegationCredential = async (input: {
     id: input.agentDid,
     capabilities: {
       paymentProtocols: ["x402"],
-      spendCapDaily: "100 USDC"
+      spendCapDaily: input.spendCapDaily ?? "100 USDC"
     },
     ownerEmail: input.ownerEmail
   };
@@ -201,7 +198,6 @@ export const issueDelegationCredential = async (input: {
 
   return signCredential({
     credential,
-    kind: "delegation",
     kid,
     signerPublicKey: humanKey.publicKey,
     signerSecretKey: humanKey.secretKey

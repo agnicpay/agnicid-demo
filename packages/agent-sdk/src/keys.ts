@@ -1,22 +1,11 @@
-import {
-  Keypair,
-  decode,
-  encode,
-  ensureKeypair as sharedEnsureKeypair,
-  loadKeypair,
-  saveKeypair
-} from "@agnicid/shared";
+import { Keypair, loadKeypair } from "@agnicid/shared";
 
 export type KeyAlias = "human" | "agent" | "issuer";
 
-export const KEY_ALIASES: KeyAlias[] = ["human", "agent", "issuer"];
-
-export const getKeypair = (alias: KeyAlias) => loadKeypair(alias);
-
-export const ensureKeypair = (alias: KeyAlias) => sharedEnsureKeypair(alias);
-
-export const saveKeyAlias = (alias: KeyAlias, keypair: Keypair) => saveKeypair(alias, keypair);
-
-export const toUint8Array = (key: string) => decode(key);
-
-export const fromUint8Array = (bytes: Uint8Array) => encode(bytes);
+export const requireKeypair = async (alias: KeyAlias): Promise<Keypair> => {
+  const keypair = await loadKeypair(alias);
+  if (!keypair) {
+    throw new Error(`Missing ${alias} key. Import a wallet bundle before running this command.`);
+  }
+  return keypair;
+};

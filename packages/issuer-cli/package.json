@@ -1,0 +1,32 @@
+{
+  "name": "@agnicid/issuer-cli",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "agnicid-issuer": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf dist",
+    "lint": "eslint src --ext .ts",
+    "dev:cli": "tsx ./src/cli.ts"
+  },
+  "dependencies": {
+    "@agnicid/shared": "file:../../shared",
+    "mkdirp": "^3.0.1",
+    "nanoid": "^5.0.7",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/yargs": "^17.0.32",
+    "rimraf": "^5.0.5",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  }
+}

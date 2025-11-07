@@ -1,23 +1,15 @@
-export interface SellerConfig {
+export interface Challenge {
+  challengeId: string;
+  createdAt: string;
   amount: string;
   asset: string;
   claims: string[];
   vpFormat: "jwt_vp";
-  paymentEndpoint: string;
-  acceptEndpoint: string;
-}
-
-export interface Challenge extends SellerConfig {
-  challengeId: string;
-  createdAt: string;
-  paymentProof?: PaymentProof;
   forceUnder18: boolean;
-}
-
-export interface PaymentProof {
-  txId: string;
-  amount: string;
-  asset: string;
+  settlement?: {
+    txId: string;
+    settledAt: string;
+  };
 }
 
 export type LogStatus = "info" | "success" | "error";

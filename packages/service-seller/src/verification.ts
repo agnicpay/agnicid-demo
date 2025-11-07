@@ -1,6 +1,5 @@
-import { fromBase58 } from "@agnicid/shared";
+import { fromBase58, did as sharedDid } from "@agnicid/shared";
 import { importJWK, jwtVerify } from "jose";
-import { resolveDid } from "@agnicid/agent-sdk";
 import type {
   AgentDelegationCredential,
   AgeCredential,
@@ -50,10 +49,11 @@ export const verifyPresentation = async (
   vpJwt: string,
   challenge: Challenge,
   log: LogFn,
-  forceUnder18: boolean
+  forceUnder18: boolean,
+  audience: string
 ): Promise<VerificationOutcome> => {
   log("vp.received", "info", "Verifiable presentation received");
-  const vpResult = await verifyJwt(vpJwt, challenge, log);
+  const vpResult = await verifyJwt(vpJwt, challenge, log, audience);
 
   const credentials = vpResult.vp?.verifiableCredential;
   if (!Array.isArray(credentials) || credentials.length === 0) {
@@ -110,16 +110,20 @@ export const verifyPresentation = async (
   };
 };
 
-const verifyJwt = async (vpJwt: string, challenge: Challenge, log: LogFn): Promise<JwtVpPayload> => {
+const verifyJwt = async (
+  vpJwt: string,
+  challenge: Challenge,
+  log: LogFn,
+  audience: string
+): Promise<JwtVpPayload> => {
   const vpHeader = decodeProtectedHeader(vpJwt);
   log("vp.header", "info", `VP kid ${vpHeader.kid ?? "unknown"}`);
 
-  const holderDid = vpHeader.kid?.split("#")[0] ?? challenge.acceptEndpoint;
+  const holderDid = vpHeader.kid?.split("#")[0] ?? audience;
   const key = await loadVerificationKey(holderDid, vpHeader.kid);
-  const expectedAudience = new URL(challenge.acceptEndpoint).origin;
 
   const verification = await jwtVerify(vpJwt, key, {
-    audience: expectedAudience
+    audience
   });
   const payload = verification.payload as unknown as JwtVpPayload;
 
@@ -160,7 +164,7 @@ const isDelegationCredential = (
   Array.isArray(record.payload.vc?.type) && record.payload.vc.type.includes(VC_TYPES.DELEGATION);
 
 const loadVerificationKey = async (did: string, expectedKid?: string) => {
-  const document = await resolveDid(did);
+  const document = await sharedDid.loadDidDocument(did);
   if (!document) {
     throw new Error(`Unknown DID: ${did}`);
   }

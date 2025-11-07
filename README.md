@@ -5,7 +5,8 @@ Agnic.ID demonstrates the complete Know-Your-Agent (KYA) flow for x402 agentic p
 | Package | Purpose |
 | --- | --- |
 | `packages/wallet-ui` | Neo-minimalist React wallet for enrollment, credential issuance, and bundle export. |
-| `packages/agent-sdk` | TypeScript SDK + CLI for key management, DID generation, credential issuance, and x402 orchestration. |
+| `packages/issuer-cli` | Headless local issuer for developers/CI — mirrors wallet issuance flows from the terminal. |
+| `packages/agent-sdk` | TypeScript SDK + CLI for bundle import, VP creation, and x402 resubmission (read-only identity). |
 | `packages/service-seller` | Express seller that issues HTTP 402 challenges, verifies proofs, and renders a live console. |
 | `packages/mcp-bridge` | Placeholder shim for future MCP/n8n integrations. |
 | `shared` | Shared crypto helpers, schemas, and DID utilities. |
@@ -54,39 +55,55 @@ Stop with `Ctrl+C`. The CLI instructions are printed when the demo boots.
      node packages/agent-sdk/dist/cli.js x402:call --jobs http://localhost:8081/jobs
      ```
 
-   - On success, the CLI prints the payment proof and redeemed job listings; the seller console updates in real time.
+   - The CLI now implements the Coinbase x402 re-submit cycle: the first request receives `402 Payment Required`; the second request sends `X-PAYMENT` (signed envelope) and `X-PRESENTATION` (JWT-VP). Seller responds `200 OK` with `X-PAYMENT-RESPONSE`.
 
-   - Toggle “Under-18 failure” in the console and run the CLI again to receive a `403 AGE_POLICY_NOT_MET` response.
+   - Toggle “Under-18 failure” in the console and re-run the command to receive a `403 AGE_POLICY_NOT_MET` response.
 
-### Agent CLI cheatsheet
+### Agent CLI cheatsheet (read-only)
+
+```bash
+# List credentials in the imported bundle
+node packages/agent-sdk/dist/cli.js vc:list
+
+# Create a JWT-VP bound to a seller challenge
+node packages/agent-sdk/dist/cli.js vp:make --challenge c-123 --audience http://localhost:8081
+
+# Execute the x402 flow (request → 402 → resubmit)
+node packages/agent-sdk/dist/cli.js x402:call --jobs http://localhost:8081/jobs
+```
+
+The agent CLI no longer generates identity materials; import a bundle exported from wallet-ui (or issued via issuer-cli) before running these commands.
+
+### Issuer CLI cheatsheet (developer-only)
 
 ```bash
 # Generate keys (human, agent, issuer)
-node packages/agent-sdk/dist/cli.js keygen
+node packages/issuer-cli/dist/cli.js keygen
 
 # Create mock did:sol documents
-node packages/agent-sdk/dist/cli.js did:init
+node packages/issuer-cli/dist/cli.js did:init
 
 # Issue credentials
-node packages/agent-sdk/dist/cli.js vc:issue email --email alice@example.com
-node packages/agent-sdk/dist/cli.js vc:issue age --birthdate 1990-01-01
-node packages/agent-sdk/dist/cli.js vc:issue delegation --owner-email alice@example.com
-
-# Create a JWT-VP manually
-node packages/agent-sdk/dist/cli.js vp:make --challenge c-123 --audience http://localhost:8081
+node packages/issuer-cli/dist/cli.js vc:issue email --email alice@example.com
+node packages/issuer-cli/dist/cli.js vc:issue age --birthdate 1990-01-01
+node packages/issuer-cli/dist/cli.js vc:issue delegation --owner-email alice@example.com --spend-cap "250 USDC"
 
 # List stored credentials
-node packages/agent-sdk/dist/cli.js vc:list
+node packages/issuer-cli/dist/cli.js vc:list
 ```
 
 All data lives under `~/.agnicid` (keys, DIDs, VCs, presentations).
 
 ### Seller endpoints
 
-- `GET /jobs` → `402` challenge with x402 requirements
-- `POST /pay` → accepts `{ amount, asset, challengeId }`, returns `{ txId }`
-- `POST /redeem` → verifies `{ paymentProof, vp_jwt }`
+- `GET /jobs`
+  - First call → `402` with `X-PAYMENT-REQUIRED` header describing the challenge
+  - Second call with `X-PAYMENT` + `X-PRESENTATION` headers → `200` with `X-PAYMENT-RESPONSE`
 - `GET /console/state` & `POST /console/toggle` power the console UI
+
+### Facilitator mock
+
+`packages/service-seller/src/facilitator.ts` simulates Coinbase’s facilitator: it verifies payment payloads, checks challenge IDs, and returns a settlement object (`status`, `txId`, `settledAt`). The seller attaches this settlement in `X-PAYMENT-RESPONSE` so agents can display facilitator results.
 
 ### Wallet API
 
@@ -102,10 +119,12 @@ The wallet UI runs an accompanying API (`http://localhost:8787`):
 # Start seller and wallet (in one terminal)
 npm run demo
 
-# In another terminal, issue fresh credentials
-node packages/agent-sdk/dist/cli.js vc:issue email --email alice@example.com
-node packages/agent-sdk/dist/cli.js vc:issue age --birthdate 1990-01-01
-node packages/agent-sdk/dist/cli.js vc:issue delegation --owner-email alice@example.com
+# In another terminal, issue fresh credentials (wallet UI or issuer CLI)
+node packages/issuer-cli/dist/cli.js keygen
+node packages/issuer-cli/dist/cli.js did:init
+node packages/issuer-cli/dist/cli.js vc:issue email --email alice@example.com
+node packages/issuer-cli/dist/cli.js vc:issue age --birthdate 1990-01-01
+node packages/issuer-cli/dist/cli.js vc:issue delegation --owner-email alice@example.com --spend-cap "100 USDC"
 
 # Call the seller (third terminal)
 node packages/agent-sdk/dist/cli.js x402:call --jobs http://localhost:8081/jobs

@@ -1,5 +1,4 @@
 import { decode } from "@agnicid/shared";
-import nacl from "tweetnacl";
 import { importJWK, JWK, JWTPayload, SignJWT } from "jose";
 
 const toBase64Url = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
@@ -29,27 +28,4 @@ export const signJwtVc = async (
   signer.setIssuedAt();
   signer.setExpirationTime(options.expiration ?? "10m");
   return signer.sign(options.key);
-};
-
-export const signJwt = async (
-  payload: JWTPayload,
-  options: { key: Awaited<ReturnType<typeof importEd25519Key>>; audience?: string; expiration?: string; kid: string }
-) => {
-  const signer = new SignJWT(payload)
-    .setProtectedHeader({ alg: "EdDSA", typ: "JWT", kid: options.kid })
-    .setIssuedAt();
-
-  if (options.audience) {
-    signer.setAudience(options.audience);
-  }
-  if (options.expiration) {
-    signer.setExpirationTime(options.expiration);
-  }
-  return signer.sign(options.key);
-};
-
-export const signDetached = (payload: Uint8Array, secretKeyBase64: string) => {
-  const secretKey = decode(secretKeyBase64);
-  const signature = nacl.sign.detached(payload, secretKey);
-  return Buffer.from(signature).toString("base64url");
 };

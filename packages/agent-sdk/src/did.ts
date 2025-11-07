@@ -1,10 +1,7 @@
 import { promises as fs } from "node:fs";
-import path from "node:path";
-import { Keypair } from "@agnicid/shared";
 import type { DidDocument } from "@agnicid/shared";
-import { mkdirp } from "mkdirp";
 import { did as sharedDid, resolveAgnicIdPath } from "@agnicid/shared";
-import { ensureKeypair, getKeypair, KeyAlias } from "./keys.js";
+import type { KeyAlias } from "./keys.js";
 
 type DidAlias = KeyAlias;
 
@@ -26,49 +23,17 @@ const readAliases = async (): Promise<AliasRegistry> => {
   }
 };
 
-const writeAliases = async (aliases: AliasRegistry) => {
-  await mkdirp(path.dirname(ALIASES_FILE));
-  await fs.writeFile(ALIASES_FILE, JSON.stringify(aliases, null, 2), "utf-8");
-};
-
-const createDidForAlias = async (alias: DidAlias, keypair: Keypair) => {
-  const role = alias;
-  const options =
-    alias === "issuer"
-      ? { id: "did:sol:agnic:issuer", keyFragment: "key-issuer" }
-      : undefined;
-  const document = sharedDid.generateDid(role, keypair.publicKey, options);
-  await sharedDid.saveDidDocument(document);
-  return document.id;
-};
-
-export const ensureDid = async (alias: DidAlias) => {
-  const aliases = await readAliases();
-  if (aliases[alias]) {
-    const doc = await sharedDid.loadDidDocument(aliases[alias]);
-    if (doc) {
-      return doc;
-    }
-  }
-
-  const keypair = await ensureKeypair(alias);
-  const did = await createDidForAlias(alias, keypair);
-  aliases[alias] = did;
-  await writeAliases(aliases);
-  const doc = await sharedDid.loadDidDocument(did);
-  if (!doc) {
-    throw new Error(`Failed to load DID document for alias ${alias}`);
-  }
-  return doc;
-};
-
-export const getDid = async (alias: DidAlias) => {
+export const requireDid = async (alias: DidAlias): Promise<DidDocument> => {
   const aliases = await readAliases();
   const did = aliases[alias];
   if (!did) {
-    return null;
+    throw new Error(`Missing DID for alias ${alias}. Import a wallet bundle before running this command.`);
   }
-  return sharedDid.loadDidDocument(did);
+  const doc = await sharedDid.loadDidDocument(did);
+  if (!doc) {
+    throw new Error(`DID document ${did} not found on disk.`);
+  }
+  return doc;
 };
 
 export const resolveDid = (did: string) => sharedDid.loadDidDocument(did);

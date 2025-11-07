@@ -1,7 +1,8 @@
 import axios from "axios";
 import { createPresentation } from "./presentation.js";
 import { loadCredentialByKind } from "./store.js";
-import type { RedeemPayload, X402Challenge } from "./types.js";
+import { buildPaymentEnvelope } from "./payment.js";
+import type { PaymentEnvelope, PaymentResponse, X402Challenge } from "./types.js";
 
 const CLAIM_TO_KIND: Record<string, string> = {
   email_verified: "email",
@@ -10,11 +11,12 @@ const CLAIM_TO_KIND: Record<string, string> = {
 
 export interface X402CallResult {
   challenge: X402Challenge;
-  paymentProof: { txId: string; amount: string; asset: string };
+  paymentEnvelope: PaymentEnvelope;
   vpJwt: string;
-  redeemResponse: {
+  response: {
     status: number;
     data: unknown;
+    paymentResponse?: PaymentResponse;
   };
 }
 
@@ -36,33 +38,33 @@ const uniqueCredentialKinds = (claims: string[], includeDelegation: boolean) => 
   return Array.from(kinds);
 };
 
-export const executeX402Flow = async (jobsEndpoint: string, options: X402CallOptions = {}): Promise<X402CallResult> => {
-  const jobsResponse = await axios.get(jobsEndpoint, {
+export const executeX402Flow = async (
+  jobsEndpoint: string,
+  options: X402CallOptions = {}
+): Promise<X402CallResult> => {
+  const initialResponse = await axios.get(jobsEndpoint, {
     validateStatus: () => true
   });
 
-  if (jobsResponse.status !== 402) {
-    throw new Error(`Expected 402 from seller, received ${jobsResponse.status}`);
+  let challenge: X402Challenge;
+  if (initialResponse.status === 402) {
+    const header = initialResponse.headers["x-payment-required"] as string;
+    challenge = header
+      ? (JSON.parse(Buffer.from(header, "base64url").toString("utf-8")) as X402Challenge)
+      : (initialResponse.data as X402Challenge);
+  } else if (initialResponse.status === 200) {
+    return {
+      challenge: initialResponse.data.challenge ?? ({} as X402Challenge),
+      paymentEnvelope: {} as PaymentEnvelope,
+      vpJwt: "",
+      response: {
+        status: initialResponse.status,
+        data: initialResponse.data
+      }
+    };
+  } else {
+    throw new Error(`Unexpected seller response: ${initialResponse.status}`);
   }
-
-  const challenge = jobsResponse.data as X402Challenge;
-  const paymentResponse = await axios.post(
-    challenge.paymentEndpoint,
-    {
-      amount: challenge.amount,
-      asset: challenge.asset,
-      challengeId: challenge.challengeId
-    },
-    {
-      validateStatus: () => true
-    }
-  );
-
-  if (paymentResponse.status !== 200) {
-    throw new Error(`Payment endpoint returned ${paymentResponse.status}`);
-  }
-
-  const paymentProof = paymentResponse.data as { txId: string; amount: string; asset: string };
 
   const credentialKinds = uniqueCredentialKinds(challenge.claims ?? [], options.includeDelegation ?? true);
   const credentials: string[] = [];
@@ -75,7 +77,13 @@ export const executeX402Flow = async (jobsEndpoint: string, options: X402CallOpt
     credentials.push(credential.jwt);
   }
 
-  const audience = new URL(challenge.acceptEndpoint).origin;
+  const paymentEnvelopeResult = await buildPaymentEnvelope({
+    challengeId: challenge.challengeId,
+    amount: challenge.amount,
+    asset: challenge.asset
+  });
+
+  const audience = new URL(jobsEndpoint).origin;
 
   const presentation = await createPresentation({
     credentials,
@@ -83,23 +91,27 @@ export const executeX402Flow = async (jobsEndpoint: string, options: X402CallOpt
     audience
   });
 
-  const redeemPayload: RedeemPayload = {
-    challengeId: challenge.challengeId,
-    paymentProof,
-    vp_jwt: presentation.vpJwt
-  };
-
-  const redeemResponse = await axios.post(challenge.acceptEndpoint, redeemPayload, {
+  const sellerResponse = await axios.get(jobsEndpoint, {
+    headers: {
+      "X-PAYMENT": paymentEnvelopeResult.header,
+      "X-PRESENTATION": presentation.vpJwt
+    },
     validateStatus: () => true
   });
 
+  const paymentResponseHeader = sellerResponse.headers["x-payment-response"] as string | undefined;
+  const paymentResponse = paymentResponseHeader
+    ? (JSON.parse(Buffer.from(paymentResponseHeader, "base64url").toString("utf-8")) as PaymentResponse)
+    : undefined;
+
   return {
     challenge,
-    paymentProof,
+    paymentEnvelope: paymentEnvelopeResult.envelope,
     vpJwt: presentation.vpJwt,
-    redeemResponse: {
-      status: redeemResponse.status,
-      data: redeemResponse.data
+    response: {
+      status: sellerResponse.status,
+      data: sellerResponse.data,
+      paymentResponse
     }
   };
 };

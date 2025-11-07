@@ -1,6 +1,6 @@
-# Agnic.ID MVP Specification
+# Agnic.ID MVP Specification 
 
-# Vision (MVP 0)
+## Vision (MVP 0)
 
 Prove—from keyboard to console—the end-to-end **KYA for x402 Agentic Payments** flow where:
 
@@ -10,18 +10,18 @@ Prove—from keyboard to console—the end-to-end **KYA for x402 Agentic Payment
 * The **agent** returns a payment artifact + a verifiable presentation (VP) in a single response; the seller verifies and serves data.
 * Everything runs locally; no backend DB. Keys + credentials live in local files/IndexedDB.
 
-# Value Stream (single glance)
+## Value Stream (single glance)
 
 User enrolls → Agent configured → Agent calls Seller → Seller issues 402 challenge (payment+proof) → Agent pays + presents VCs → Seller verifies → Seller serves data.
 
-# Primary Personas
+## Primary Personas
 
 * **Builder-User (Human Owner)**: wants quick enrollment; verifies email and birthdate and optionally fills profile.
 * **Agent (Executor)**: a script or n8n node that holds keys/VCs and negotiates with sellers.
 * **Service Provider (Seller)**: a simple “API seller” that monetizes with x402 and requires policy proof (“over 18”).
 * **Developer/Demo Operator**: runs all parts locally for demo and testing.
 
-# User Journey (Happy Path)
+## User Journey (Happy Path)
 
 1. **Enroll**: User opens Wallet UI → enters email + birthdate → sees local “Enroll” page generate DID & keys, issues **EmailCredential** + **AgeCredential** (full claim for now), and **AgentDelegationCredential**.
 2. **Call Seller**: Agent invokes Seller’s `/jobs` endpoint.
@@ -35,16 +35,18 @@ User enrolls → Agent configured → Agent calls Seller → Seller issues 402 c
 5. **Verify & Serve**: Seller verifies payment + VP → returns job listings.
 6. **Demo Toggle**: Seller has “Under 18? Reject” switch to show failure path.
 
-# Architecture (MVP 0 — all local, no DB)
+## Architecture (MVP 0 — all local, no DB)
 
 **Monorepo (TypeScript)**
 
 ```
 agnic-id-mvp/
   packages/
-    wallet-ui/         # Vite/React SPA – user enrollment + local storage
-    agent-sdk/         # Node lib (and n8n node later) – keys, DID, VP, x402 client
+    wallet-ui/         # Vite/React SPA – user enrollment + local storage (keys, DIDs, VC issuance)
+    issuer-cli/        # Headless local issuer for demos/tests; mirrors wallet-ui issuance without a backend
+    agent-sdk/         # Node lib (and n8n later) – imports bundle, builds VP, x402 resubmission
     service-seller/    # Express server on port :8081 – issues 402, verifies payment+VCs
+    # Express server on port :8081 – issues 402, verifies payment+VCs
     mcp-bridge/        # thin shim for later n8n/MCP demo (optional in MVP 0)
   shared/
     schemas/           # JSON Schemas for Email, Age, Delegation VCs
@@ -52,56 +54,82 @@ agnic-id-mvp/
   .tooling/            # scripts for keygen, fixtures, test data
 ```
 
-**Local Storage**
+### Local Storage
 
 * **Wallet UI**: browser `IndexedDB` for user profile; export/import bundle to `~/.agnicid/`.
-* **Agent SDK**: file-based store at `~/.agnicid/`:
-
-  * `keys/agent.key`, `keys/human.key` (raw ed25519 JSON)
-  * `dids/human.did.json`, `dids/agent.did.json` (mock DID docs)
-  * `vcs/*.vc.json` (issued credentials)
-  * `presentations/*.vp.jwt` (optional cache)
+* **Agent SDK**: file-based store at `~/.agnicid/` with `keys`, `dids`, `vcs`, and `presentations` folders.
 * **Seller**: no persistence—verifies inputs per request.
 
-**DID Strategy**
+### DID Strategy
 
-* **MVP 0**: **Mock `did:sol`** resolver reading `dids/*.json` locally. DID doc includes `verificationMethod` entries with ed25519 public keys.
-* **Phase 1.5**: add **Solana devnet** resolver/publisher behind a flag; same DID doc shape.
+* **MVP 0**: Mock `did:sol` resolver reading local files.
+* **Phase 1.5**: Add Solana devnet anchoring.
 
-**Crypto & Proof Format**
+### Crypto & Proof Format
 
 * Keys: ed25519 (tweetnacl/libsodium)
-* VCs: plain JSON + detached JWS proofs (JWT-VC acceptable for MVP)
+* VCs: JSON + detached JWS proofs (JWT-VC acceptable for MVP)
 * VP: JWT-VP (single signature by **Agent DID** proving holder binding)
 * No ZK/SD yet (add SD-JWT/BBS+ later)
 
-**Protocols & Formats**
+### Protocols & Formats (aligned to Coinbase x402)
 
-* **x402**: local mock of HTTP 402; Seller responds with:
+**Source of truth:** x402 flow uses HTTP 402 and resubmission with headers, not custom endpoints. We follow Coinbase’s spec exactly:
 
-  ```json
-  {
-    "challengeId": "c-123",
-    "amount": "0.01",
-    "asset": "USDC",
-    "claims": ["email_verified", "age_over_18"],
-    "vpFormat": "jwt_vp",
-    "paymentEndpoint": "http://localhost:8081/pay",
-    "acceptEndpoint": "http://localhost:8081/redeem"
-  }
-  ```
-* **One-shot submit** (Agent → Seller `/redeem`):
+**x402 request cycle**
 
-  ```json
-  {
-    "challengeId": "c-123",
-    "paymentProof": { "txId": "mock-12345", "amount":"0.01", "asset":"USDC" },
-    "vp_jwt": "<base64url.jwt>"
-  }
-  ```
-* Seller verifies paymentProof (mock), then VP, then claim semantics.
+1. **Initial request** → client/agent calls the protected endpoint (e.g., `GET /jobs`).
+2. **Server responds ****`402 Payment Required`** with a **payment requirements body** (amount, asset/network, scheme) and instructions.
+3. **Client creates payment payload** using its wallet/facilitator.
+4. **Client resubmits the SAME request** (e.g., `GET /jobs`) **including ********************************`X-PAYMENT`******************************** header** with the signed payment payload.
+5. **Server verifies payment** either locally or via a **facilitator** (recommended).
+6. **Settlement** can be done by the server or through the facilitator (e.g., a `/settle` provided by the facilitator).
+7. On success, server returns `200 OK` with resource and **`X-PAYMENT-RESPONSE`** header (settlement details).
 
-# Minimal VC Schemas (aligned vocabulary, simplified content)
+**KYA carriage (one-shot with payment):**
+To keep the experience one-shot while staying x402-compliant, we attach a **KYA Verifiable Presentation (VP)** alongside payment using an additional header:
+
+* `X-PRESENTATION: <jwt_vp>` (JWT-VP signed by the Agent DID, containing Email, Age, Delegation VCs).
+* The **payment** lives in `X-PAYMENT` per x402.
+* The **claims the seller requires** (e.g., `email_verified`, `age_over_18`) are declared in the **402 response body** as part of the negotiation.
+
+**Example 402 response body (from Seller):**
+
+```json
+{
+  "challengeId": "c-123",
+  "amount": "0.01",
+  "asset": "USDC",
+  "network": "base",
+  "scheme": "x402/basic",
+  "requiredClaims": ["email_verified", "age_over_18"],
+  "vpFormat": "jwt_vp",
+  "facilitator": "mock-facilitator"
+}
+```
+
+**Agent resubmission (SAME HTTP request):**
+
+```
+GET /jobs HTTP/1.1
+Host: localhost:8081
+X-PAYMENT: <signed-payment-payload>
+X-PRESENTATION: <jwt_vp>
+```
+
+**Server success response:**
+
+```
+HTTP/1.1 200 OK
+X-PAYMENT-RESPONSE: <settlement-metadata>
+Content-Type: application/json
+
+{ "jobs": [ ... ] }
+```
+
+> Note: We removed ad‑hoc `/pay` and `/redeem` endpoints. Verification/settlement are routed through the **facilitator abstraction** in-process (mock) to preserve x402 semantics while keeping everything local for the MVP.
+
+## Minimal VC Schemas (aligned vocabulary, simplified content)
 
 **1) EmailCredential**
 
@@ -120,7 +148,7 @@ agnic-id-mvp/
 }
 ```
 
-**2) AgeCredential** (full claim for MVP)
+**2) AgeCredential**
 
 ```json
 {
@@ -157,166 +185,179 @@ agnic-id-mvp/
 }
 ```
 
-**Verifiable Presentation (JWT-VP) payload**
+## Developer-Facing Components
 
-```json
-{
-  "vp": {
-    "holder": "did:sol:agent",
-    "verifiableCredential": [<EmailCredential>, <AgeCredential>, <AgentDelegationCredential>]
-  },
-  "nonce": "c-123",            // binds to Seller challenge
-  "aud": "http://localhost:8081",
-  "exp": <short-lived>
-}
-```
+### Role Boundaries (Identity vs. Agent)
 
-# Developer-Facing Components
+To clarify the responsibility split:
 
-**wallet-ui (React SPA)**
+* **Human Wallet (wallet-ui)**: Sole source of truth for key generation, DID registration, and VC issuance. The human controls their identity lifecycle.
+* **Agent (agent-sdk)**: Operates on behalf of the human, but never issues or creates identity materials. It reads a verified exported bundle from the wallet to construct Verifiable Presentations and perform x402 payments.
+* **Issuer-CLI (optional)**: Developer utility mirroring wallet-ui issuance for CI/demos.
 
-* Screens: Welcome → Verify Email (shows “copy this URL to verify”) → Enter Birthdate → Optional Profile → Generate Keys → Issue VCs → Export Bundle
-* Buttons: “Export Bundle” (downloads `~/.agnicid` zip), “Launch Agent Call” (invokes agent on `/jobs`)
+This separation enforces human ownership of identity, keeps the agent stateless, and simplifies security for the MVP.
 
-**agent-sdk (Node lib + CLI)**
+### wallet-ui (React SPA)
 
-* `keygen`: create `human.key`, `agent.key`
-* `did:init`: create mock DID docs in `dids/`
-* `vc:issue`: issue Email, Age, Delegation creds signed by issuer DID (self-issued)
-* `vp:make`: assemble and sign VP (JWT)
-* `x402:call`: orchestrate GET `/jobs` → parse 402 → call `/pay` (mock) → POST `/redeem` with `vp_jwt`
-* Optional: `n8n` node wrapper later; keep API pure TS so we can drop it in.
+* Screens: Landing → Onboard (verify email, enter birthdate) → Generate Keys → Issue VCs → Export Bundle.
+* *Wallet-ui is the only place end‑users create keys/DIDs/VCs.*
+* Buttons: “Export Bundle” and “Launch Agent Call”.
 
-**service-seller (Express)**
+### agent-sdk (Node lib + CLI) (Node lib + CLI)
 
-* `GET /jobs`: if no valid auth → respond `402` + JSON challenge (as above)
-* `POST /pay`: accept `{amount, asset}` → return `{txId}`
-* `POST /redeem`: verify
+**Purpose:** runtime for agents only (no issuing). It **consumes** a wallet bundle produced by wallet-ui/issuer-cli and performs presentations + x402.
 
-  * paymentProof.amount/asset
-  * VP signature (resolve mock did:sol)
-  * VC proofs (iss, exp, subject DID alignment)
-  * Semantics: `email_verified === true` and `age_over_18 === true`
-* UI console (simple web page) showing step logs with green/red checkmarks + toggle “Force Under-18 failure”.
+* Commands:
 
-# Acceptance Criteria & Test Scenarios
+  * `bundle:import --path ~/.agnicid` — load keys, DIDs, VCs (read-only).
+  * `vp:make --claims email_verified,age_over_18 --nonce <challengeId>` — assemble & sign JWT‑VP with **Agent DID**.
+  * `x402:call <URL> --bundle ~/.agnicid` — run the request→402→resubmit with `X-PAYMENT` + `X-PRESENTATION`.
 
-**Happy Path – Over 18**
+### issuer-cli (Headless local issuer)
 
-* Given a user enrolled with `email_verified = true` and `birthDate` older than 18 years,
-* And agent holds Delegation VC,
-* When agent requests `/jobs`,
-* Then Seller returns `402` challenge (claims + amount),
-* When agent pays and POSTs VP with 3 VCs,
-* Then Seller verifies all and returns `200 OK` with job list.
+**Purpose:** developer convenience for demos/CI. Mirrors wallet-ui issuance flow without servers.
 
-**Failure – Under 18**
+* Commands:
 
-* Given `age_over_18 = false` (or birthdate < 18),
-* Flow proceeds to `/redeem`,
-* Seller rejects with `403` + reason `AGE_POLICY_NOT_MET`.
+  * `keygen` — generate **Human** and **Agent** keys.
+  * `did:init` — create mock did:sol docs for Human and Agent.
+  * `vc:issue email|age|delegation` — issue VCs signed by **issuer DID** (or Human for delegation).
+* Output: writes to `~/.agnicid/`.
 
-**Failure – Untrusted Issuer**
+### service-seller (Express)
 
-* EmailCredential signed by an unknown DID,
-* Seller rejects with `403` + reason `UNTRUSTED_ISSUER`.
+* `GET /jobs`:
 
-**Failure – Tampered VC**
+  * If no valid `X-PAYMENT` header: respond **402** with JSON payment requirements (`amount`, `asset`, `network`, `scheme`, `requiredClaims`, `vpFormat`, `facilitator`).
+  * If `X-PAYMENT` present:
 
-* Any VC payload modified (signature mismatch),
-* Seller rejects `400` + reason `INVALID_PROOF`.
+    1. Forward to **mock facilitator** verifier (local module) to check payment payload.
+    2. Verify `X-PRESENTATION` (JWT‑VP) → resolve mock `did:sol` holder, verify VC signatures/issuers/semantics.
+    3. On success: return **200** with jobs list and **`X-PAYMENT-RESPONSE`** header; otherwise return **402** (payment invalid) or **403** (policy/claims not met).
+* Web console logs each step and includes **“Under-18 failure”** toggle.
+* `GET /jobs`:
 
-**Failure – Missing Payment**
+  * If no valid `X-PAYMENT` header: respond **402** with JSON payment requirements (`amount`, `asset`, `network`, `scheme`, `requiredClaims`, `vpFormat`, `facilitator`).
+  * If `X-PAYMENT` present:
 
-* `paymentProof.amount != 0.01` or missing,
-* Seller rejects `402` + reason `PAYMENT_REQUIRED`.
+    1. Forward to **mock facilitator** verifier (local module) to check payment payload.
+    2. Verify `X-PRESENTATION` (JWT‑VP) → resolve mock `did:sol` holder, verify VC signatures/issuers/semantics.
+    3. On success: return **200** with jobs list and **`X-PAYMENT-RESPONSE`** header; otherwise return **402** (payment invalid) or **403** (policy/claims not met).
+* Web console logs each step and includes **“Under‑18 failure”** toggle.
+* `GET /jobs`: responds with 402 challenge.
+* `POST /pay`: mock payment.
+* `POST /redeem`: verifies payment, VP, and claims.
+* Web console logs each step and includes “Under-18 failure” toggle.
 
-**Failure – Holder Mismatch**
+## Acceptance Criteria & Test Scenarios
 
-* `vp.holder` is not equal to Delegation VC `credentialSubject.id`,
-* Seller rejects `403` + reason `HOLDER_MISMATCH`.
+* **Happy Path – Over 18**: success end-to-end.
+* **Failure – Under 18**: reject 403 AGE_POLICY_NOT_MET.
+* **Failure – Untrusted Issuer**: reject 403.
+* **Failure – Tampered VC**: reject 400.
+* **Failure – Missing Payment**: reject 402.
+* **Failure – Holder Mismatch**: reject 403.
+* **Expiry**: reject 401 VP_EXPIRED.
 
-**Expiry**
+## Threat Model (MVP)
 
-* If `exp` in VP is past now,
-* Seller rejects `401` + reason `VP_EXPIRED`.
+* Key theft, replay prevention, issuer spoofing handled minimally with nonce and trust list.
 
-# Threat Model (MVP-appropriate)
+## Tech Choices (minimal friction)
 
-* **Key theft**: keys in `~/.agnicid/`; warn user and allow passphrase-encrypted PEM as optional flag later.
-* **Replay**: bind VP with `nonce = challengeId` and short `exp`.
-* **Issuer spoofing**: maintain simple **Trusted Issuers List** in Seller config (for MVP, just `did:sol:agnic:issuer` and “self-issued human” for AgentDelegationCredential).
-* **Down-grading**: Seller enforces `vpFormat = jwt_vp` only.
-
-# Tech Choices (minimal friction)
-
-* **TS runtime**: Node 20+, Vite for SPA
-* **Crypto**: `tweetnacl` (ed25519), `jose` (JWS/JWT)
-* **HTTP**: Express, Axios/Fetch
-* **UI**: React + minimal Tailwind
+* **TS runtime**: Node 20+, Vite
+* **Crypto**: tweetnacl, jose
+* **HTTP**: Express, Axios
+* **UI**: React + Tailwind
 * **No DB**: file/IndexedDB only
-* **Solana (Phase 1.5)**: `@solana/web3.js` gated with `USE_DEVNET=true`
+* **Solana (Phase 1.5)**: `@solana/web3.js`
 
-# Backlog (MVP 0 → 2 weeks)
+## Backlog (MVP 0 → 2 weeks)
 
-**Day 1–2**
+* Days 1–2: scaffold + mock DID
+* Days 3–4: VC issuance
+* Days 5–6: VP generation
+* Day 7: Seller 402 challenge
+* Days 8–9: Seller verification
+* Day 10: Wallet UI
+* Days 11–14: testing + polish
 
-* Monorepo scaffolding; agent keygen + DID mock resolver; schemas
-  **Day 3–4**
-* VC issuance (Email, Age, Delegation) with JWS proofs
-  **Day 5–6**
-* VP (JWT) creation; bind nonce/aud/exp
-  **Day 7**
-* Seller 402 challenge + `/pay` mock
-  **Day 8–9**
-* Seller `/redeem` verification pipeline (signatures → issuers → semantics)
-  **Day 10**
-* Wallet UI (enroll, generate, issue, export); console in Seller
-  **Day 11**
-* Tests for all acceptance scenarios; CLI smoke tests
-  **Day 12–14**
-* Polish, demo script, README + one-click run scripts
-
-# Demo Script (for the show-and-tell)
+## Demo Script
 
 1. Open **Wallet UI** → enroll user → generate DID/keys → issue VCs → export bundle.
-2. Start **Seller** on `:8081`, show console waiting.
-3. Run **Agent CLI**: `x402:call http://localhost:8081/jobs --bundle ~/.agnicid`
-4. Watch Seller console: `402 issued → payment received → VP verified → 200 served`.
-5. Flip Seller toggle to “Under-18 failure” and rerun → see `403 AGE_POLICY_NOT_MET`.
+2. Start **Seller** console (`:8081`).
+3. Run **Agent CLI**: `x402:call http://localhost:8081/jobs --bundle ~/.agnicid`.
+4. Observe:
 
-# Phase 1.5 (post-MVP quick wins)
+   * First call → **HTTP 402** with payment requirements & required claims.
+   * Agent resubmits **same request** with `X-PAYMENT` + `X-PRESENTATION`.
+   * Seller verifies via **facilitator mock** → returns **200 OK** + `X-PAYMENT-RESPONSE`.
+5. Flip Seller to “Under‑18 failure” and rerun → **403 AGE_POLICY_NOT_MET**.
 
-* Real **did:sol** anchoring on **Solana devnet** (publish DID docs).
-* **n8n node** wrapper for `agent-sdk` so we can demo “agent within workflow”.
-* **SD-JWT/BBS+** for selective disclosure of “over 18”.
+## Phase 1.5 (next)
 
----
+* Real did:sol anchoring on Solana devnet.
+* n8n integration.
+* SD-JWT/BBS+ for selective disclosure.
+* Optionally swap **mock facilitator** with a real one (CDP or self-hosted API). (next)
+* Real did:sol anchoring on Solana devnet.
+* n8n integration.
+* SD-JWT/BBS+ for selective disclosure.
 
-## User Stories (condensed)
+## User Stories (Condensed)
 
 **Epic 1: Enrollment & Issuance**
 
-* As a user, I can verify my email (MVP: copy a local “verification URL”) so that a VC records `email_verified=true`.
-* As a user, I can enter my birthdate so that an Age VC encodes `age_over_18` (derived once for MVP).
-* As a user, I can generate Human/Agent DIDs and keys and store them locally.
-* As a user, I can issue a Delegation VC from my Human DID to my Agent DID.
+* As a user, verify email and birthdate, generate keys/DIDs, issue VCs.
+  **Epic 2: Agent Presentation**
+* As an agent, request resource, handle 402, assemble and sign VP, submit to `/redeem`.
+  **Epic 3: Seller Verification**
+* As a seller, verify signatures, issuers, claim validity, and serve data.
+  **Epic 4: Failure Handling**
+* As a seller, reject missing payment, untrusted issuers, tampered/expired proofs.
 
-**Epic 2: Agent Presentation**
+## Threat & Security
 
-* As an agent, I can request a resource and handle a 402 challenge that lists claims and payment.
-* As an agent, I can assemble a VP (JWT) including Email, Age, Delegation VCs and sign it with my DID key.
-* As an agent, I can submit the VP and payment proof in one shot to redeem the resource.
+* Minimal but real crypto.
+* Trusted issuer list.
+* Nonce-binding in VP.
 
-**Epic 3: Seller Verification**
+## Future Extensions
 
-* As a seller, I can verify the VP signature by resolving the holder DID.
-* As a seller, I can validate VC signatures, issuer trust, subject alignment, and time validity.
-* As a seller, I can enforce claim semantics (`email_verified`, `age_over_18`) before serving data.
-* As a seller, I can present a console log of each step for demo and debugging.
+* Solana devnet publishing.
+* OIDC4VCI upgrade.
+* Advanced selective disclosure.
+* Agent reputation metrics.
 
-**Epic 4: Failure Handling**
+---
 
-* As a seller, I can reject requests when payment is missing/incorrect.
-* As a seller, I can reject untrusted issuers, tampered VCs, expired VPs, or holder mismatches.
-* As a demo operator, I can force an “under 18” failure to show policy enforcement.
+## Update - 10-6-19-23
+
+### 1️⃣ x402 Protocol Alignment
+
+We’ve corrected our protocol layer to **fully align with Coinbase’s x402 specification**. The MVP must follow the documented x402 cycle ([https://docs.cdp.coinbase.com/x402/core-concepts/how-it-works](https://docs.cdp.coinbase.com/x402/core-concepts/how-it-works)):
+
+* Use **HTTP 402** for initial payment requirements.
+* Resubmit the **same request** with `X-PAYMENT` header containing the signed payment payload.
+* Verification and settlement happen through a **mock facilitator** module — not ad‑hoc `/pay` or `/redeem` endpoints.
+* Include a `X-PRESENTATION` header carrying our KYA JWT‑VP. Seller verifies both headers and responds `200 OK` with `X-PAYMENT-RESPONSE`.
+
+### 2️⃣ Facilitator Mock
+
+Implement a local module simulating facilitator verification/settlement (stubbed network). Keep its API minimal for future replacement with real CDP facilitator.
+
+### 3️⃣ Wallet Landing Page
+
+We now need a **polished landing page for the user wallet (wallet‑ui)** that reflects our **Agnic.ID design language**:
+
+* **Brand mood:** trustable, minimal, robust, innovative, simple, solid, honest.
+* **Visuals:** clean typography, calm neutral palette (off‑white + charcoal + accent blue/purple), soft edges, smooth transitions.
+* **Layout:** hero section describing “Your Identity. Your Agents.” with CTA to “Start Wallet” and “Learn about Agnic.ID”.
+* Include a short animated flow graphic (even placeholder SVG) showing human → agent → service provider.
+* Keep it responsive and lightweight (Vite + Tailwind).
+
+### 4️⃣ Implementation Notes
+
+* All crypto/VC operations remain local (IndexedDB / `~/.agnicid`).
+* The wallet onboarding must connect visually to our brand while being demo‑ready for product showcases.
+
