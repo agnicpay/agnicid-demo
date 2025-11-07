@@ -8,24 +8,9 @@
     "target": "ES2022",
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "composite": true,
-    "baseUrl": ".",
-    "paths": {
-      "@agnicid/agent-sdk": ["../agent-sdk/src/index.ts"],
-      "@agnicid/agent-sdk/*": ["../agent-sdk/src/*"],
-      "@agnicid/issuer-cli": ["../issuer-cli/src/index.ts"],
-      "@agnicid/issuer-cli/*": ["../issuer-cli/src/*"]
-    }
+    "composite": true
   },
   "include": [
     "server/**/*"
-  ],
-  "references": [
-    {
-      "path": "../agent-sdk/tsconfig.json"
-    },
-    {
-      "path": "../issuer-cli/tsconfig.json"
-    }
   ]
 }
