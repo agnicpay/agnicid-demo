@@ -4,11 +4,20 @@
     "outDir": "dist",
     "rootDir": "src",
     "moduleResolution": "NodeNext",
+    "composite": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true
   },
   "include": [
     "src/**/*"
+  ],
+  "references": [
+    {
+      "path": "../../shared/tsconfig.json"
+    },
+    {
+      "path": "../agent-sdk/tsconfig.json"
+    }
   ]
 }

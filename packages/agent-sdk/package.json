@@ -12,7 +12,7 @@
     "agnicid": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -b tsconfig.json",
     "clean": "rimraf dist",
     "lint": "eslint src --ext .ts",
     "test": "tsx ./src/__tests__/agent-sdk.spec.ts",

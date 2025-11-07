@@ -16,6 +16,9 @@
   "references": [
     {
       "path": "../agent-sdk/tsconfig.json"
+    },
+    {
+      "path": "../issuer-cli/tsconfig.json"
     }
   ]
 }

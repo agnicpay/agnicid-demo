@@ -11,7 +11,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -b tsconfig.json",
     "clean": "rimraf dist",
     "lint": "eslint src --ext .ts",
     "dev:cli": "tsx ./src/cli.ts"

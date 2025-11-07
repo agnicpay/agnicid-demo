@@ -14,7 +14,7 @@ app.get("/health", asyncHandler(async (_req, res) => {
     await ensureStore();
     res.json({ status: "ok", home: AGNIC_ID_HOME });
 }));
-app.get("/api/status", asyncHandler(async (_req, res) => {
+app.get("/status", asyncHandler(async (_req, res) => {
     await ensureStore();
     const keys = await Promise.all(KEY_ALIASES.map(async (alias) => ({
         alias,
@@ -32,12 +32,12 @@ app.get("/api/status", asyncHandler(async (_req, res) => {
         credentials
     });
 }));
-app.get("/api/credentials", asyncHandler(async (_req, res) => {
+app.get("/credentials", asyncHandler(async (_req, res) => {
     await ensureStore();
     const credentials = await listStoredCredentials();
     res.json(credentials);
 }));
-app.post("/api/credentials/email", asyncHandler(async (req, res) => {
+app.post("/credentials/email", asyncHandler(async (req, res) => {
     const { email, emailVerified = true } = req.body;
     if (!email) {
         return res.status(400).json({ error: "email is required" });
@@ -51,7 +51,7 @@ app.post("/api/credentials/email", asyncHandler(async (req, res) => {
     });
     res.json(result.stored);
 }));
-app.post("/api/credentials/age", asyncHandler(async (req, res) => {
+app.post("/credentials/age", asyncHandler(async (req, res) => {
     const { birthDate } = req.body;
     if (!birthDate) {
         return res.status(400).json({ error: "birthDate is required" });
@@ -64,7 +64,7 @@ app.post("/api/credentials/age", asyncHandler(async (req, res) => {
     });
     res.json(result.stored);
 }));
-app.post("/api/credentials/delegation", asyncHandler(async (req, res) => {
+app.post("/credentials/delegation", asyncHandler(async (req, res) => {
     const { ownerEmail, spendCapDaily } = req.body;
     if (!ownerEmail) {
         return res.status(400).json({ error: "ownerEmail is required" });
@@ -79,7 +79,7 @@ app.post("/api/credentials/delegation", asyncHandler(async (req, res) => {
     });
     res.json(result.stored);
 }));
-app.post("/api/agent/run", asyncHandler(async (req, res) => {
+app.post("/agent/run", asyncHandler(async (req, res) => {
     await ensureStore();
     const { jobs = "http://localhost:8081/jobs", includeDelegation = true } = req.body ?? {};
     const events = [];
@@ -91,7 +91,7 @@ app.post("/api/agent/run", asyncHandler(async (req, res) => {
         res.status(400).json({ error: error.message, events });
     }
 }));
-app.post("/api/enroll", asyncHandler(async (req, res) => {
+app.post("/enroll", asyncHandler(async (req, res) => {
     const { email, birthDate, spendCapDaily } = req.body;
     if (!email) {
         return res.status(400).json({ error: "email is required" });
@@ -128,7 +128,7 @@ app.post("/api/enroll", asyncHandler(async (req, res) => {
         }
     });
 }));
-app.post("/api/export", asyncHandler(async (_req, res) => {
+app.post("/export", asyncHandler(async (_req, res) => {
     await ensureStore();
     const zip = new AdmZip();
     await addDirectoryToZip(zip, AGNIC_ID_HOME, "");

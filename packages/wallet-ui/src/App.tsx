@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_WALLET_API_BASE ?? "http://localhost:8787";
+import "./index.css";
+
+const API_BASE = import.meta.env.VITE_WALLET_API_BASE ?? "/api/wallet";
 const AGNIC_ID_HOME_LABEL = "~/.agnicid";
 
 interface BundlePayload {
@@ -129,7 +131,7 @@ export function App() {
     setIsSubmitting(true);
     setError(null);
     try {
-      const response = await axios.post<BundlePayload>(`${API_BASE}/api/export`);
+      const response = await axios.post<BundlePayload>(`${API_BASE}/export`);
       setBundle(response.data);
       setStepIndex((prev) => Math.min(prev + 1, steps.length - 1));
     } catch (err) {
@@ -141,7 +143,7 @@ export function App() {
 
   const refreshStatus = async () => {
     try {
-      const response = await axios.get<WalletStatus>(`${API_BASE}/api/status`);
+      const response = await axios.get<WalletStatus>(`${API_BASE}/status`);
       setWalletStatus(response.data);
       if (response.data.home) {
         setStorePath(response.data.home);
@@ -168,7 +170,7 @@ export function App() {
         if (!emailVerified) {
           return Promise.reject(new Error("Please verify your email first."));
         }
-        return axios.post(`${API_BASE}/api/credentials/email`, {
+        return axios.post(`${API_BASE}/credentials/email`, {
           email,
           emailVerified
         });
@@ -177,7 +179,7 @@ export function App() {
         if (!birthDate) {
           return Promise.reject(new Error("Birthdate is required"));
         }
-        return axios.post(`${API_BASE}/api/credentials/age`, { birthDate });
+        return axios.post(`${API_BASE}/credentials/age`, { birthDate });
       },
       delegation: () => {
         if (!issuedState.email || !issuedState.age) {
@@ -186,7 +188,7 @@ export function App() {
         if (!email) {
           return Promise.reject(new Error("Email is required for delegation"));
         }
-        return axios.post(`${API_BASE}/api/credentials/delegation`, {
+        return axios.post(`${API_BASE}/credentials/delegation`, {
           ownerEmail: email,
           spendCapDaily: spendCapDaily || "100 USDC"
         });
@@ -698,7 +700,7 @@ function CredentialJsonViewer({
 }
 
 function AgentIde({ onBack }: { onBack: () => void }) {
-  const [jobsUrl, setJobsUrl] = useState("http://localhost:8081/jobs");
+  const [jobsUrl, setJobsUrl] = useState("/api/seller/jobs");
   const [events, setEvents] = useState<AgentTimelineEvent[]>([]);
   const [displayEvents, setDisplayEvents] = useState<AgentTimelineEvent[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -731,7 +733,7 @@ function AgentIde({ onBack }: { onBack: () => void }) {
     timers.current.forEach((timer) => window.clearTimeout(timer));
     timers.current = [];
     try {
-      const response = await axios.post(`${API_BASE}/api/agent/run`, {
+      const response = await axios.post(`${API_BASE}/agent/run`, {
         jobs: jobsUrl
       });
       const { events: eventLog, result } = response.data;

@@ -13,9 +13,13 @@
     "clean": "npm run -ws --if-present clean || true",
     "demo": "tsx .tooling/scripts/demo.ts",
     "lint": "npm run -ws --if-present lint",
-    "dev": "concurrently \"npm:dev:seller\" \"npm:dev:wallet\"",
+    "dev": "concurrently \"npm:dev:backend-services\" \"npm:dev:main-server\"",
+    "dev:backend-services": "concurrently \"npm:dev:seller\" \"npm:dev:wallet-api\" \"npm:dev:frontend\"",
+    "dev:main-server": "cd packages/main-server && npm run dev",
     "dev:seller": "npm run dev --workspace @agnicid/service-seller",
-    "dev:wallet": "npm run dev --workspace @agnicid/wallet-ui"
+    "dev:wallet-api": "npm run dev:server --workspace @agnicid/wallet-ui",
+    "dev:frontend": "npm run dev:vite --workspace @agnicid/wallet-ui",
+    "start": "cd packages/main-server && npm start"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",

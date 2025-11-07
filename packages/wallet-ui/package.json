@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:vite\"",
-    "dev:vite": "vite --host 127.0.0.1",
+    "dev:vite": "vite --host 127.0.0.1 --port 5173",
+    "dev:frontend": "vite --host 127.0.0.1 --port 5173",
     "dev:server": "concurrently \"npm:watch:server\" \"npm:serve:server\"",
-    "watch:server": "tsc -p tsconfig.server.json --watch --preserveWatchOutput",
+    "dev:api": "concurrently \"npm:watch:server\" \"npm:serve:server\"",
+    "watch:server": "tsc -b tsconfig.server.json --watch --preserveWatchOutput",
     "serve:server": "node ./scripts/start-dev-server.mjs",
-    "build": "tsc -p tsconfig.json && vite build && tsc -p tsconfig.server.json",
+    "build": "tsc -b tsconfig.json && vite build && tsc -b tsconfig.server.json",
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.tsx"
   },

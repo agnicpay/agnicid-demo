@@ -37,7 +37,7 @@ app.get(
 );
 
 app.get(
-  "/api/status",
+  "/status",
   asyncHandler(async (_req, res) => {
     await ensureStore();
     const keys = await Promise.all(
@@ -63,7 +63,7 @@ app.get(
 );
 
 app.get(
-  "/api/credentials",
+  "/credentials",
   asyncHandler(async (_req, res) => {
     await ensureStore();
     const credentials = await listStoredCredentials();
@@ -72,7 +72,7 @@ app.get(
 );
 
 app.post(
-  "/api/credentials/email",
+  "/credentials/email",
   asyncHandler(async (req, res) => {
     const { email, emailVerified = true } = req.body as { email?: string; emailVerified?: boolean };
     if (!email) {
@@ -90,7 +90,7 @@ app.post(
 );
 
 app.post(
-  "/api/credentials/age",
+  "/credentials/age",
   asyncHandler(async (req, res) => {
     const { birthDate } = req.body as { birthDate?: string };
     if (!birthDate) {
@@ -107,7 +107,7 @@ app.post(
 );
 
 app.post(
-  "/api/credentials/delegation",
+  "/credentials/delegation",
   asyncHandler(async (req, res) => {
     const { ownerEmail, spendCapDaily } = req.body as { ownerEmail?: string; spendCapDaily?: string };
     if (!ownerEmail) {
@@ -126,7 +126,7 @@ app.post(
 );
 
 app.post(
-  "/api/agent/run",
+  "/agent/run",
   asyncHandler(async (req, res) => {
     await ensureStore();
     const { jobs = "http://localhost:8081/jobs", includeDelegation = true } = req.body ?? {};
@@ -145,7 +145,7 @@ app.post(
 );
 
 app.post(
-  "/api/enroll",
+  "/enroll",
   asyncHandler(async (req, res) => {
     const { email, birthDate, spendCapDaily } = req.body as {
       email?: string;
@@ -193,7 +193,7 @@ app.post(
 );
 
 app.post(
-  "/api/export",
+  "/export",
   asyncHandler(async (_req, res) => {
     await ensureStore();
     const zip = new AdmZip();
