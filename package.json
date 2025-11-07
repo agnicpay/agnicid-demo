@@ -12,10 +12,14 @@
     "build": "npm run -ws --if-present build",
     "clean": "npm run -ws --if-present clean || true",
     "demo": "tsx .tooling/scripts/demo.ts",
-    "lint": "npm run -ws --if-present lint"
+    "lint": "npm run -ws --if-present lint",
+    "dev": "concurrently \"npm:dev:seller\" \"npm:dev:wallet\"",
+    "dev:seller": "npm run dev --workspace @agnicid/service-seller",
+    "dev:wallet": "npm run dev --workspace @agnicid/wallet-ui"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
+    "concurrently": "^9.2.1",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.29.1",

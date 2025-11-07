@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 
 const API_BASE = import.meta.env.VITE_WALLET_API_BASE ?? "http://localhost:8787";
+const AGNIC_ID_HOME_LABEL = "~/.agnicid";
 
 interface BundlePayload {
   filename: string;
