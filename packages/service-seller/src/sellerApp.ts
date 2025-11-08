@@ -79,11 +79,20 @@ export const createSellerService = (options: SellerServiceOptions = {}) => {
     return challenge;
   };
 
+  const resolveRequestOrigin = (req: express.Request) => {
+    const forwardedProto = req.get("x-forwarded-proto")?.split(",")[0]?.trim();
+    const scheme = forwardedProto || req.protocol || "http";
+    const host = req.get("host");
+    return host ? `${scheme}://${host}` : null;
+  };
+
   router.get("/jobs", async (req, res) => {
     const paymentHeader = req.get("X-PAYMENT");
     const presentationHeader = req.get("X-PRESENTATION");
-
-    const origin = `${req.protocol}://${req.get("host")}`;
+    const origin = resolveRequestOrigin(req);
+    if (!origin) {
+      return res.status(400).json({ error: "MISSING_HOST", detail: "Request missing Host header" });
+    }
 
     if (!paymentHeader || !presentationHeader) {
       const challenge = buildChallenge();
