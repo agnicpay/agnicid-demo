@@ -1,7 +1,5 @@
-import { mkdirp } from "mkdirp";
 import path from "node:path";
-import { promises as fs } from "node:fs";
-import { resolveAgnicIdPath } from "@agnicid/shared";
+import { ensureDir, resolveAgnicIdPath, writeFile as writeStorageFile } from "@agnicid/shared";
 import { importEd25519Key, signJwt } from "./crypto.js";
 import { getVerificationMethodId, requireDid } from "./did.js";
 import { requireKeypair } from "./keys.js";
@@ -49,8 +47,8 @@ export const createPresentation = async (input: PresentationInput): Promise<Pres
   });
 
   const filePath = resolveAgnicIdPath("presentations", `vp-${Date.now()}.jwt`);
-  await mkdirp(path.dirname(filePath));
-  await fs.writeFile(filePath, vpJwt, "utf-8");
+  await ensureDir(path.dirname(filePath));
+  await writeStorageFile(filePath, vpJwt, "utf-8");
 
   return {
     vpJwt,

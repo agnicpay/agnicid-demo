@@ -1,9 +1,8 @@
-import { promises as fs } from "node:fs";
 import path from "node:path";
-import { mkdirp } from "mkdirp";
 import { nanoid } from "nanoid";
 import { decode, toBase58 } from "../crypto/index.js";
 import { resolveAgnicIdPath } from "../env.js";
+import { ensureDir, listDirectory, readFile, writeFile } from "../storage.js";
 import type { DidDocument } from "./types.js";
 
 export type MockDidRole = "human" | "agent" | "issuer";
@@ -48,15 +47,15 @@ export const generateDid = (
 
 export const saveDidDocument = async (document: DidDocument) => {
   const file = didFilePath(document.id);
-  await mkdirp(path.dirname(file));
-  await fs.writeFile(file, JSON.stringify(document, null, 2), "utf-8");
+  await ensureDir(path.dirname(file));
+  await writeFile(file, JSON.stringify(document, null, 2), "utf-8");
   return file;
 };
 
 export const loadDidDocument = async (did: string): Promise<DidDocument | null> => {
   try {
     const file = didFilePath(did);
-    const raw = await fs.readFile(file, "utf-8");
+    const raw = await readFile(file, "utf-8");
     return JSON.parse(raw) as DidDocument;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -69,13 +68,13 @@ export const loadDidDocument = async (did: string): Promise<DidDocument | null> 
 export const listDidDocuments = async (): Promise<DidDocument[]> => {
   const dir = resolveAgnicIdPath("dids");
   try {
-    const entries = await fs.readdir(dir);
+    const entries = await listDirectory(dir);
     const documents: DidDocument[] = [];
     for (const entry of entries) {
       if (!entry.endsWith(".json")) {
         continue;
       }
-      const raw = await fs.readFile(path.join(dir, entry), "utf-8");
+      const raw = await readFile(path.join(dir, entry), "utf-8");
       documents.push(JSON.parse(raw));
     }
     return documents;

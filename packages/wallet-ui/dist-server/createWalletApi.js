@@ -1,10 +1,10 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
-import { promises as fs } from "node:fs";
 import AdmZip from "adm-zip";
 import { listStoredCredentials, executeX402Flow } from "@agnicid/agent-sdk";
 import { AGNIC_ID_HOME, ensureStore, ensureDid, ensureKeypair, issueAgeCredential, issueDelegationCredential, issueEmailCredential, KEY_ALIASES, resolveStorePath } from "@agnicid/issuer-cli";
+import { listFilesRecursive, pathExists as storagePathExists, readFile as storageReadFile } from "@agnicid/shared";
 export const createWalletApi = (options = {}) => {
     const router = express.Router();
     router.use(cors());
@@ -173,26 +173,15 @@ const buildAbsoluteFromPath = (req, pathSuffix) => {
     const scheme = proto || req.protocol || "http";
     return `${scheme}://${host}${pathSuffix}`;
 };
-const pathExists = async (target) => {
-    try {
-        await fs.access(target);
-        return true;
-    }
-    catch {
-        return false;
-    }
-};
+const pathExists = (target) => storagePathExists(target);
 const addDirectoryToZip = async (zip, absoluteDir, relativeDir) => {
-    const entries = await fs.readdir(absoluteDir, { withFileTypes: true });
-    for (const entry of entries) {
-        const absolutePath = path.join(absoluteDir, entry.name);
-        const relativePath = path.join(relativeDir, entry.name);
-        if (entry.isDirectory()) {
-            await addDirectoryToZip(zip, absolutePath, relativePath);
-        }
-        else if (entry.isFile()) {
-            const data = await fs.readFile(absolutePath);
-            zip.addFile(relativePath, data);
-        }
+    const files = await listFilesRecursive(absoluteDir);
+    for (const relativePath of files) {
+        const normalizedRelative = path.join(relativeDir, relativePath);
+        const absolutePath = path.join(absoluteDir, normalizedRelative);
+        const data = await storageReadFile(absolutePath);
+        const buffer = typeof data === "string" ? Buffer.from(data) : data;
+        const archivePath = normalizedRelative.split(path.sep).join("/");
+        zip.addFile(archivePath, buffer);
     }
 };

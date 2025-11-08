@@ -4,8 +4,11 @@ import { createSellerService } from "@agnicid/service-seller";
 import { createWalletApi } from "@agnicid/wallet-ui/server/api";
 
 const ensureAgnicHome = () => {
-  if (!process.env.AGNIC_ID_HOME) {
-    process.env.AGNIC_ID_HOME = "/tmp/.agnicid";
+  if (!process.env.AGNICID_HOME) {
+    process.env.AGNICID_HOME = "/tmp/.agnicid";
+  }
+  if (!process.env.AGNICID_STORAGE) {
+    process.env.AGNICID_STORAGE = "blob";
   }
 };
 

@@ -11,7 +11,7 @@ import {
 } from "./credentials.js";
 import { readJson } from "./fs.js";
 import type { StoredCredential } from "./types.js";
-import { resolveAgnicIdPath } from "@agnicid/shared";
+import { listDirectory, resolveAgnicIdPath } from "@agnicid/shared";
 
 const logJson = (label: string, payload: unknown) => {
   console.log(`\n${label}`);
@@ -33,8 +33,7 @@ const listCredentials = async () => {
 };
 
 const readJsonRecords = async (dir: string) => {
-  const fs = await import("node:fs/promises");
-  const files = await fs.readdir(dir);
+  const files = await listDirectory(dir);
   const records: StoredCredential[] = [];
   for (const file of files) {
     if (!file.endsWith(".json")) continue;

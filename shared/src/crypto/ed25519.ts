@@ -1,8 +1,7 @@
-import { mkdirp } from "mkdirp";
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import nacl from "tweetnacl";
 import { getAgnicIdHome } from "../env.js";
+import { ensureDir, readFile, writeFile } from "../storage.js";
 
 export interface Keypair {
   publicKey: string;
@@ -27,20 +26,20 @@ const keyFilePath = (name: string) => path.join(getAgnicIdHome(), "keys", `${nam
 
 export const saveKeypair = async (name: string, keypair: Keypair) => {
   const filePath = keyFilePath(name);
-  await mkdirp(path.dirname(filePath));
+  await ensureDir(path.dirname(filePath));
   const payload = {
     id: name,
     publicKey: keypair.publicKey,
     secretKey: keypair.secretKey,
     createdAt: new Date().toISOString()
   };
-  await fs.writeFile(filePath, JSON.stringify(payload, null, 2), "utf-8");
+  await writeFile(filePath, JSON.stringify(payload, null, 2), "utf-8");
   return filePath;
 };
 
 export const loadKeypair = async (name: string): Promise<Keypair | null> => {
   try {
-    const raw = await fs.readFile(keyFilePath(name), "utf-8");
+    const raw = await readFile(keyFilePath(name), "utf-8");
     const parsed = JSON.parse(raw);
     return {
       publicKey: parsed.publicKey,

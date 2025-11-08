@@ -1,8 +1,6 @@
-import { promises as fs } from "node:fs";
 import path from "node:path";
-import { Keypair } from "@agnicid/shared";
+import { Keypair, ensureDir, readFile, writeFile } from "@agnicid/shared";
 import type { DidDocument } from "@agnicid/shared";
-import { mkdirp } from "mkdirp";
 import { did as sharedDid, resolveAgnicIdPath } from "@agnicid/shared";
 import { ensureKeypair, KeyAlias } from "./keys.js";
 
@@ -15,8 +13,8 @@ interface AliasRegistry {
 const ALIASES_FILE = resolveAgnicIdPath("dids", "aliases.json");
 
 const writeAliases = async (aliases: AliasRegistry) => {
-  await mkdirp(path.dirname(ALIASES_FILE));
-  await fs.writeFile(ALIASES_FILE, JSON.stringify(aliases, null, 2), "utf-8");
+  await ensureDir(path.dirname(ALIASES_FILE));
+  await writeFile(ALIASES_FILE, JSON.stringify(aliases, null, 2), "utf-8");
 };
 
 const parseAliases = async (raw: string): Promise<AliasRegistry> => {
@@ -47,7 +45,7 @@ const repairAliases = (raw: string): AliasRegistry | null => {
 
 const readAliases = async (): Promise<AliasRegistry> => {
   try {
-    const raw = await fs.readFile(ALIASES_FILE, "utf-8");
+    const raw = await readFile(ALIASES_FILE, "utf-8");
     return parseAliases(raw);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {

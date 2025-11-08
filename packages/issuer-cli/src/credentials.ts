@@ -1,8 +1,6 @@
-import { mkdirp } from "mkdirp";
 import path from "node:path";
-import { promises as fs } from "node:fs";
 import { nanoid } from "nanoid";
-import { resolveAgnicIdPath } from "@agnicid/shared";
+import { ensureDir, resolveAgnicIdPath, writeFile as writeStorageFile } from "@agnicid/shared";
 import { importEd25519Key, signJwtVc } from "./crypto.js";
 import { ensureKeypair } from "./keys.js";
 import { ensureDid, getVerificationMethodId } from "./did.js";
@@ -32,7 +30,7 @@ const persistCredential = async <TSubject extends BaseCredentialSubject>(
 ): Promise<StoredCredential<TSubject>> => {
   const uniqueSlug = `${slug}-${Date.now()}-${nanoid(6)}`;
   const filePath = credentialFile(uniqueSlug, "json");
-  await mkdirp(path.dirname(filePath));
+  await ensureDir(path.dirname(filePath));
   const record = {
     id: vc.id,
     type: vc.type.join(","),
@@ -47,7 +45,7 @@ const persistCredential = async <TSubject extends BaseCredentialSubject>(
     jwt
   });
   const jwtFile = credentialFile(uniqueSlug, "jwt");
-  await fs.writeFile(jwtFile, jwt, "utf-8");
+  await writeStorageFile(jwtFile, jwt, "utf-8");
   return record;
 };
 
