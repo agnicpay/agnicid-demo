@@ -1,4 +1,10 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "packages/wallet-ui/dist"
+  "outputDirectory": "packages/wallet-ui/dist",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/serverless"
+    }
+  ]
 }
