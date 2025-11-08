@@ -427,7 +427,7 @@ export function App() {
                         title="Email Credential"
                         description="Confirms your email is verified for policy compliance."
                         ready={issuedState.email}
-                        actionLabel={issuedState.email ? "Issued" : "Issue Email VC"}
+                        actionLabel={issuedState.email ? "Re-issue Email VC" : "Issue Email VC"}
                         disabled={issuing !== null}
                         onAction={() => {
                           void handleIssueCredential("email");
@@ -437,7 +437,7 @@ export function App() {
                         title="Age Credential"
                         description="Encodes your birthdate and derived age_over_18 claim."
                         ready={issuedState.age}
-                        actionLabel={issuedState.age ? "Issued" : "Issue Age VC"}
+                        actionLabel={issuedState.age ? "Re-issue Age VC" : "Issue Age VC"}
                         disabled={issuing !== null}
                         onAction={() => {
                           void handleIssueCredential("age");
@@ -447,7 +447,7 @@ export function App() {
                         title="Agent Delegation Credential"
                         description="Authorizes your agent to respond to x402 challenges."
                         ready={issuedState.delegation}
-                        actionLabel={issuedState.delegation ? "Issued" : "Issue Delegation VC"}
+                        actionLabel={issuedState.delegation ? "Re-issue Delegation VC" : "Issue Delegation VC"}
                         disabled={issuing !== null}
                         onAction={() => {
                           void handleIssueCredential("delegation");
@@ -596,23 +596,30 @@ function CredentialIssueCard({
 }) {
   return (
     <div className="rounded-xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="max-w-md">
           <p className="text-sm font-semibold text-slate-800">{title}</p>
           <p className="text-xs text-slate-500">{description}</p>
         </div>
-        <button
-          type="button"
-          onClick={onAction}
-          disabled={ready || disabled}
-          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-            ready
-              ? "bg-emerald/20 text-emerald-600"
-              : "bg-trustBlue text-white shadow hover:bg-trustBlue/90 disabled:opacity-40"
-          }`}
-        >
-          {actionLabel}
-        </button>
+        <div className="flex items-center gap-3">
+          {ready && (
+            <span className="rounded-full bg-emerald/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-700">
+              Issued
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onAction}
+            disabled={disabled}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+              ready
+                ? "border border-emerald-400 text-emerald-600 hover:bg-emerald-50"
+                : "bg-trustBlue text-white shadow hover:bg-trustBlue/90"
+            }`}
+          >
+            {actionLabel}
+          </button>
+        </div>
       </div>
       {extra && <div className="mt-4">{extra}</div>}
     </div>

@@ -37,7 +37,7 @@ export const createSellerService = (options: SellerServiceOptions = {}) => {
 
   const challenges = new Map<string, Challenge>();
   const MAX_LOGS = 100;
-  let forceUnder18 = false;
+  let enforceAgePolicy = false;
   let logs: VerificationLog[] = [];
 
   const emitLog = (log: VerificationLog) => {
@@ -73,7 +73,7 @@ export const createSellerService = (options: SellerServiceOptions = {}) => {
       claims: CLAIMS,
       vpFormat: "jwt_vp",
       createdAt: new Date().toISOString(),
-      forceUnder18
+      forceUnder18: enforceAgePolicy
     };
     challenges.set(challengeId, challenge);
     return challenge;
@@ -163,7 +163,7 @@ export const createSellerService = (options: SellerServiceOptions = {}) => {
         presentationHeader,
         challenge,
         (step, status, detail, meta) => recordLog(challenge.challengeId, step, status, detail, meta),
-        forceUnder18,
+        !enforceAgePolicy,
         origin
       );
 
@@ -222,23 +222,23 @@ export const createSellerService = (options: SellerServiceOptions = {}) => {
   router.get("/console/state", (_req, res) => {
     const state: ConsoleState = {
       logs,
-      forceUnder18
+      forceUnder18: enforceAgePolicy
     };
     res.json(state);
   });
 
   router.post("/console/toggle", (req, res) => {
     const value = req.body?.forceUnder18;
-    forceUnder18 = Boolean(value);
+    enforceAgePolicy = Boolean(value);
     emitLog({
       id: nanoid(10),
       challengeId: "console",
       step: "console.toggle",
-      status: forceUnder18 ? "info" : "success",
-      detail: forceUnder18 ? "Under-18 failure enforced" : "Under-18 failure disabled",
+      status: enforceAgePolicy ? "success" : "info",
+      detail: enforceAgePolicy ? "Age policy enforced" : "Under-18 override enabled",
       timestamp: new Date().toISOString()
     });
-    res.json({ forceUnder18 });
+    res.json({ forceUnder18: enforceAgePolicy });
   });
 
   router.use(express.static(staticDir));
@@ -246,7 +246,7 @@ export const createSellerService = (options: SellerServiceOptions = {}) => {
   io?.on("connection", (socket) => {
     socket.emit("state", {
       logs,
-      forceUnder18
+      forceUnder18: enforceAgePolicy
     });
   });
 

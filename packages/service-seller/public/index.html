@@ -163,6 +163,46 @@
         background: #f8fafc;
         padding: 16px;
       }
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 52px;
+        height: 30px;
+      }
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #cbd5f5;
+        transition: 0.3s;
+        border-radius: 999px;
+      }
+      .toggle-slider::before {
+        position: absolute;
+        content: "";
+        height: 24px;
+        width: 24px;
+        left: 3px;
+        top: 3px;
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
+        transition: 0.3s;
+      }
+      .toggle-switch input:checked + .toggle-slider {
+        background-color: #2563eb;
+      }
+      .toggle-switch input:checked + .toggle-slider::before {
+        transform: translateX(22px);
+      }
       .hidden {
         display: none;
       }
@@ -184,11 +224,17 @@
 
       <section class="card">
         <h2>Policy Controls</h2>
-        <div class="toggle-row" style="display: flex; gap: 12px; align-items: center;">
-          <button id="toggle-button" class="secondary">Enable Under-18 Failure</button>
-          <span id="toggle-label" style="font-size: 13px; color: #475569;">
-            Current: Allowing over-18 claims
-          </span>
+        <div class="toggle-row" style="display: flex; gap: 16px; align-items: center;">
+          <label class="toggle-switch" aria-label="Toggle age control">
+            <input type="checkbox" id="toggle-switch" />
+            <span class="toggle-slider"></span>
+          </label>
+          <div>
+            <p style="margin: 0; font-size: 14px; font-weight: 600; color: #0f172a;">Age control</p>
+            <p id="toggle-label" style="margin: 2px 0 0; font-size: 13px; color: #475569;">
+              Age control OFF — allowing under-18 (demo)
+            </p>
+          </div>
         </div>
       </section>
 
@@ -216,6 +262,13 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
+      const BASE_PATH = window.location.pathname
+        .replace(/index\.html$/, "")
+        .replace(/\/$/, "")
+        .replace(/^$/, "");
+
+      const apiPath = (path) => `${BASE_PATH}${path}`;
+
       const state = {
         logs: [],
         rawEntries: [],
@@ -228,7 +281,7 @@
       const facilitatorPanel = document.getElementById("facilitator-panel");
       const policyPanel = document.getElementById("policy-panel");
 
-      const toggleBtn = document.getElementById("toggle-button");
+      const toggleSwitch = document.getElementById("toggle-switch");
       const toggleLabel = document.getElementById("toggle-label");
       const statusText = document.getElementById("status-text");
       const socketDot = document.getElementById("socket-dot");
@@ -263,10 +316,11 @@
 
       function updateToggleLabel() {
         toggleLabel.textContent = forceUnder18
-          ? "Current: Force Under-18 failure"
-          : "Current: Allowing over-18 claims";
-        toggleBtn.textContent = forceUnder18 ? "Disable Under-18 Failure" : "Enable Under-18 Failure";
-        toggleBtn.className = forceUnder18 ? "secondary" : "";
+          ? "Age control ON — rejecting under-18"
+          : "Age control OFF — allowing under-18 (demo)";
+        if (toggleSwitch) {
+          toggleSwitch.checked = forceUnder18;
+        }
       }
 
       function setLogs(logs) {
@@ -386,8 +440,8 @@
             value: state.policy.delegationOwnerMatches ? "Pass" : "Fail"
           },
           {
-            label: "Under-18 toggle",
-            value: forceUnder18 ? "Reject (demo)" : "Allow"
+            label: "Age control",
+            value: forceUnder18 ? "ENFORCED" : "OVERRIDDEN"
           }
         ];
         policyPanel.innerHTML = rows
@@ -402,21 +456,27 @@
       }
 
       async function fetchState() {
-        const response = await fetch("/console/state");
+        const response = await fetch(apiPath("/console/state"));
         const data = await response.json();
         forceUnder18 = data.forceUnder18;
         updateToggleLabel();
         setLogs(data.logs || []);
       }
 
-      toggleBtn.addEventListener("click", async () => {
-        forceUnder18 = !forceUnder18;
+      toggleSwitch?.addEventListener("change", async () => {
+        const desired = Boolean(toggleSwitch.checked);
+        try {
+          const response = await fetch(apiPath("/console/toggle"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ forceUnder18: desired })
+          });
+          const data = await response.json();
+          forceUnder18 = Boolean(data.forceUnder18);
+        } catch {
+          forceUnder18 = !desired; // revert locally if the request fails
+        }
         updateToggleLabel();
-        await fetch("/console/toggle", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ forceUnder18 })
-        });
       });
 
       const socket = io();

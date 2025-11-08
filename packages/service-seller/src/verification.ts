@@ -54,7 +54,7 @@ export const verifyPresentation = async (
   vpJwt: string,
   challenge: Challenge,
   log: LogFn,
-  forceUnder18: boolean,
+  allowUnder18Override: boolean,
   audience: string
 ): Promise<VerificationOutcome> => {
   log("vp.received", "info", "Verifiable presentation received");
@@ -91,11 +91,16 @@ export const verifyPresentation = async (
   if (!emailVerified) {
     throw new Error("Email credential not verified");
   }
-  if (!ageOver18) {
+  const allowUnder18 = allowUnder18Override === true;
+  if (!ageOver18 && !allowUnder18) {
     throw new Error("Age policy not met");
   }
-  if (forceUnder18) {
-    throw new Error("Under-18 policy enforced");
+  const under18Override = !ageOver18 && allowUnder18;
+  if (under18Override) {
+    log("policy.override", "info", "Under-18 override applied", {
+      age_over_18: ageOver18,
+      overrideEnabled: allowUnder18
+    });
   }
   if (holder !== delegationSubject) {
     throw new Error("Holder mismatch with delegation credential");
@@ -112,7 +117,8 @@ export const verifyPresentation = async (
     delegationOwnerMatches:
       delegationCredential.payload.vc.credentialSubject.ownerEmail ===
       emailCredential.payload.vc.credentialSubject.email,
-    enforcedUnder18: forceUnder18
+    agePolicyEnforced: !allowUnder18,
+    ageOverrideApplied: under18Override
   });
 
   log("vp.verified", "success", "Presentation and credentials verified");

@@ -134,7 +134,8 @@ export const createWalletApi = (options: WalletApiOptions = {}) => {
         return res.status(400).json({ error: "ownerEmail is required" });
       }
       await ensureStore();
-      const [humanDid, agentDid] = await Promise.all([ensureDid("human"), ensureDid("agent")]);
+      const humanDid = await ensureDid("human");
+      const agentDid = await ensureDid("agent");
       const result = await issueDelegationCredential({
         ownerDid: humanDid.id,
         agentDid: agentDid.id,
@@ -182,7 +183,8 @@ export const createWalletApi = (options: WalletApiOptions = {}) => {
 
       await ensureStore();
       await Promise.all(KEY_ALIASES.map((alias: KeyAlias) => ensureKeypair(alias)));
-      const [humanDid, agentDid] = await Promise.all([ensureDid("human"), ensureDid("agent")]);
+      const humanDid = await ensureDid("human");
+      const agentDid = await ensureDid("agent");
       await ensureDid("issuer");
 
       const emailVc = await issueEmailCredential({
