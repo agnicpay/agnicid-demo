@@ -247,7 +247,10 @@ export const listFilesRecursive = async (dir: string): Promise<string[]> => {
   }
   const prefix = ensureTrailingSlash(toBlobKey(dir));
   const blobs = await fetchAllBlobs({ prefix });
-  return blobs.map((blob) => blob.pathname.slice(prefix.length)).filter(Boolean);
+  return blobs
+    .filter((blob) => !blob.pathname.endsWith("/"))
+    .map((blob) => blob.pathname.slice(prefix.length))
+    .filter(Boolean);
 };
 
 export const getStorageDebugInfo = () => ({
