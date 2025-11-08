@@ -1,5 +1,4 @@
 import express from "express";
-import serverlessHttp from "serverless-http";
 import type { Router } from "express";
 import { getStorageDebugInfo, probeStorage } from "@agnicid/shared";
 
@@ -99,6 +98,4 @@ export const app = () => {
   return router;
 };
 
-const handler = serverlessHttp(app());
-
-export default handler;
+export default app();
