@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "npm run build:deps && npm run build:workspaces",
-    "build:workspaces": "npm run build --workspace @agnicid/service-seller && npm run build --workspace @agnicid/main-server && npm run build --workspace @agnicid/mcp-bridge && npm run build --workspace @agnicid/wallet-ui && npm run build --workspace @agnicid/tooling",
+    "build:workspaces": "npm run build --workspace @agnicid/service-seller && npm run build --workspace @agnicid/wallet-ui && npm run build --workspace @agnicid/main-server && npm run build --workspace @agnicid/mcp-bridge && npm run build --workspace @agnicid/tooling",
     "build:deps": "npm run build --workspace @agnicid/shared && npm run build --workspace @agnicid/agent-sdk && npm run build --workspace @agnicid/issuer-cli",
     "clean": "npm run -ws --if-present clean || true",
     "demo": "tsx .tooling/scripts/demo.ts",

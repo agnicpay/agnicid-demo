@@ -1,7 +1,9 @@
 node_modules
 dist
+dist-server
 .DS_Store
 *.log
 coverage
 vite.config.ts.timestamp-*
 package-lock.json
+*.tsbuildinfo
