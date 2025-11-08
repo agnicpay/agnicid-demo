@@ -11,12 +11,13 @@ import {
   BlobServiceNotAvailable
 } from "@vercel/blob";
 import type { ListBlobResultBlob } from "@vercel/blob";
-import { getAgnicIdHome } from "./env.js";
+import { getAgnicIdHome, resolveAgnicIdPath } from "./env.js";
 
 const STORAGE_ENV = (process.env.AGNICID_STORAGE ?? "").toLowerCase();
 const SHOULD_USE_BLOB =
   STORAGE_ENV === "blob" ||
   (STORAGE_ENV === "" && Boolean(process.env.BLOB_READ_WRITE_TOKEN) && Boolean(process.env.VERCEL));
+const STORAGE_MODE = SHOULD_USE_BLOB ? "blob" : "fs";
 
 const DEFAULT_NAMESPACE = process.env.AGNICID_BLOB_NAMESPACE ?? process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "local";
 const BLOB_PREFIX = [process.env.AGNICID_BLOB_PREFIX ?? "agnicid", DEFAULT_NAMESPACE]
@@ -99,7 +100,7 @@ const deleteBlob = async (key: string) => {
   }
 };
 
-export const getStorageMode = () => (SHOULD_USE_BLOB ? "blob" : "fs") as "blob" | "fs";
+export const getStorageMode = () => STORAGE_MODE;
 
 export const isBlobStorage = () => SHOULD_USE_BLOB;
 
@@ -247,4 +248,27 @@ export const listFilesRecursive = async (dir: string): Promise<string[]> => {
   const prefix = ensureTrailingSlash(toBlobKey(dir));
   const blobs = await fetchAllBlobs({ prefix });
   return blobs.map((blob) => blob.pathname.slice(prefix.length)).filter(Boolean);
+};
+
+export const getStorageDebugInfo = () => ({
+  mode: STORAGE_MODE,
+  storageEnv: STORAGE_ENV,
+  agnicidHome: getAgnicIdHome(),
+  hasBlobToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+  vercel: Boolean(process.env.VERCEL),
+  blobPrefix: BLOB_PREFIX
+});
+
+export const probeStorage = async (): Promise<boolean> => {
+  const probeDir = resolveAgnicIdPath(".health");
+  const probePath = path.join(
+    probeDir,
+    `probe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`
+  );
+  const payload = `agnic-probe:${new Date().toISOString()}`;
+  await ensureDir(path.dirname(probePath));
+  await writeFile(probePath, payload, "utf-8");
+  const readBack = await readFile(probePath, "utf-8");
+  await deleteFile(probePath).catch(() => {});
+  return readBack === payload;
 };
