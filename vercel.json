@@ -3,6 +3,10 @@
   "outputDirectory": "packages/wallet-ui/dist",
   "rewrites": [
     {
+      "source": "/api/health",
+      "destination": "/api/health"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/serverless"
     },
