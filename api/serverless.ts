@@ -1,7 +1,6 @@
 import express from "express";
 import serverlessHttp from "serverless-http";
-import { createSellerService } from "@agnicid/service-seller";
-import { createWalletApi } from "@agnicid/wallet-ui/server/api";
+import type { Router } from "express";
 import { getStorageDebugInfo, probeStorage } from "@agnicid/shared";
 
 const ensureAgnicHome = () => {
@@ -42,26 +41,60 @@ const logStorageStatus = () => {
     });
 };
 
+const createLazyRouter = (loader: () => Promise<Router>) => {
+  let cachedRouter: Router | null = null;
+  let pending: Promise<Router> | null = null;
+
+  const resolveRouter = async () => {
+    if (cachedRouter) {
+      return cachedRouter;
+    }
+    if (!pending) {
+      pending = loader().then((router) => {
+        cachedRouter = router;
+        pending = null;
+        return router;
+      });
+    }
+    return pending;
+  };
+
+  const wrapper = express.Router();
+  wrapper.use(async (req, res, next) => {
+    try {
+      const router = await resolveRouter();
+      router(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  return wrapper;
+};
+
 export const app = () => {
   ensureAgnicHome();
   logStorageStatus();
   const router = express();
 
-  router.get(["/api", "/api/health"], (_req, res) => {
+  router.get("/api", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  router.use(
-    "/api/wallet",
-    createWalletApi({
+  const walletRouter = createLazyRouter(async () => {
+    const { createWalletApi } = await import("@agnicid/wallet-ui/server/api");
+    return createWalletApi({
       sellerJobsPath: "/api/seller/jobs"
-    })
-  );
+    });
+  });
 
-  router.use(
-    "/api/seller",
-    createSellerService()
-  );
+  const sellerRouter = createLazyRouter(async () => {
+    const { createSellerService } = await import("@agnicid/service-seller");
+    return createSellerService();
+  });
+
+  router.use("/api/wallet", walletRouter);
+  router.use("/api/seller", sellerRouter);
 
   return router;
 };
