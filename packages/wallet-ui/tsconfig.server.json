@@ -3,14 +3,23 @@
   "compilerOptions": {
     "outDir": "dist-server",
     "rootDir": "server",
+    "baseUrl": ".",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "ES2022",
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "composite": true
+    "composite": true,
+    "paths": {
+      "@agnicid/issuer-cli": ["../issuer-cli/dist/index.d.ts"],
+      "@agnicid/issuer-cli/*": ["../issuer-cli/dist/*"]
+    }
   },
   "include": [
     "server/**/*"
+  ],
+  "references": [
+    { "path": "../issuer-cli/tsconfig.json" },
+    { "path": "../agent-sdk/tsconfig.json" }
   ]
 }

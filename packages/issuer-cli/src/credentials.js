@@ -43,7 +43,7 @@ const createBaseCredential = (types, issuer, subject, overrides) => {
         ...overrides
     };
 };
-const signCredential = async ({ credential, kid, signerPublicKey, signerSecretKey }) => {
+const signCredential = async ({ credential, kid, signerPublicKey, signerSecretKey, kind }) => {
     const key = await importEd25519Key({
         secretBase64: signerSecretKey,
         publicBase64: signerPublicKey,
@@ -66,7 +66,7 @@ const signCredential = async ({ credential, kid, signerPublicKey, signerSecretKe
         proofPurpose: "assertionMethod",
         jwt
     };
-    const stored = await persistCredential(credential.type[1], credential, jwt);
+    const stored = await persistCredential(kind, credential, jwt);
     return {
         jwt,
         credential,
@@ -87,7 +87,8 @@ export const issueEmailCredential = async (input) => {
         credential,
         kid,
         signerPublicKey: issuerKey.publicKey,
-        signerSecretKey: issuerKey.secretKey
+        signerSecretKey: issuerKey.secretKey,
+        kind: "email"
     });
 };
 export const issueAgeCredential = async (input) => {
@@ -109,7 +110,8 @@ export const issueAgeCredential = async (input) => {
         credential,
         kid,
         signerPublicKey: issuerKey.publicKey,
-        signerSecretKey: issuerKey.secretKey
+        signerSecretKey: issuerKey.secretKey,
+        kind: "age"
     });
 };
 export const issueDelegationCredential = async (input) => {
@@ -129,7 +131,8 @@ export const issueDelegationCredential = async (input) => {
         credential,
         kid,
         signerPublicKey: humanKey.publicKey,
-        signerSecretKey: humanKey.secretKey
+        signerSecretKey: humanKey.secretKey,
+        kind: "delegation"
     });
 };
 const isOver18 = (birthDate) => {

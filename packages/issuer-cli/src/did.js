@@ -4,10 +4,40 @@ import { mkdirp } from "mkdirp";
 import { did as sharedDid, resolveAgnicIdPath } from "@agnicid/shared";
 import { ensureKeypair } from "./keys.js";
 const ALIASES_FILE = resolveAgnicIdPath("dids", "aliases.json");
+const writeAliases = async (aliases) => {
+    await mkdirp(path.dirname(ALIASES_FILE));
+    await fs.writeFile(ALIASES_FILE, JSON.stringify(aliases, null, 2), "utf-8");
+};
+const parseAliases = async (raw) => {
+    try {
+        return JSON.parse(raw);
+    }
+    catch (error) {
+        const repaired = repairAliases(raw);
+        if (repaired) {
+            await writeAliases(repaired);
+            return repaired;
+        }
+        throw new Error(`Failed to parse DID alias registry. ${String(error)}`);
+    }
+};
+const repairAliases = (raw) => {
+    let index = raw.lastIndexOf("}");
+    while (index !== -1) {
+        const candidate = raw.slice(0, index + 1);
+        try {
+            return JSON.parse(candidate);
+        }
+        catch {
+            index = raw.lastIndexOf("}", index - 1);
+        }
+    }
+    return null;
+};
 const readAliases = async () => {
     try {
         const raw = await fs.readFile(ALIASES_FILE, "utf-8");
-        return JSON.parse(raw);
+        return parseAliases(raw);
     }
     catch (error) {
         if (error.code === "ENOENT") {
@@ -15,10 +45,6 @@ const readAliases = async () => {
         }
         throw error;
     }
-};
-const writeAliases = async (aliases) => {
-    await mkdirp(path.dirname(ALIASES_FILE));
-    await fs.writeFile(ALIASES_FILE, JSON.stringify(aliases, null, 2), "utf-8");
 };
 const createDidForAlias = async (alias, keypair) => {
     const role = alias;
