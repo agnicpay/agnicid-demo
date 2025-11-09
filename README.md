@@ -29,7 +29,7 @@ npm run build
 npm run demo
 ```
 
-This starts:
+This starts: 
 
 - Wallet UI + Wallet API on `http://localhost:5173`
 - Seller + verification console on `http://localhost:8081`
