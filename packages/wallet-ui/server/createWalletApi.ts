@@ -365,13 +365,17 @@ const clearStore = async (root: string) => {
 
 const sanitizeEntryPath = (entryName: string) => {
   const normalized = entryName.replace(/\\/g, "/").replace(/^\/+/, "");
-  if (!normalized || normalized === "." || normalized === "..") {
+  const withoutRoot = normalized.startsWith(".agnicid/")
+    ? normalized.slice(".agnicid/".length)
+    : normalized;
+  const candidate = withoutRoot.replace(/^\/+/, "");
+  if (!candidate || candidate === "." || candidate === "..") {
     return null;
   }
-  if (normalized.split("/").some((segment) => segment === "..")) {
+  if (candidate.split("/").some((segment) => segment === "..")) {
     throw new Error(`Invalid bundle entry path: ${entryName}`);
   }
-  return normalized;
+  return candidate;
 };
 
 const extractBundleTo = async (buffer: Buffer, destination: string) => {

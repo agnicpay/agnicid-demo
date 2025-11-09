@@ -85,7 +85,8 @@ const downloadBlob = async (key: string) => {
 const uploadBlob = async (key: string, data: Buffer, contentType?: string) => {
   await put(key, data, {
     access: "public",
-    contentType
+    contentType,
+    allowOverwrite: true
   });
 };
 
