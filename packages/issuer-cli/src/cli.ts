@@ -2,8 +2,13 @@
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { ensureStore } from "./config.js";
-import { ensureKeypair, KEY_ALIASES } from "./keys.js";
-import { ensureDid, listDids } from "./did.js";
+import { ensureKeypair, KEY_ALIASES, KeyAlias } from "./keys.js";
+import {
+  ensureDid,
+  listDids,
+  createSolanaDidCommand,
+  resolveSolanaDidCommand
+} from "./did.js";
 import {
   issueAgeCredential,
   issueDelegationCredential,
@@ -203,6 +208,37 @@ yargs(hideBin(process.argv))
       await ensureStore();
       const dids = await listDids();
       logJson("DIDs", dids);
+    }
+  )
+  .command(
+    "did:sol:create [alias]",
+    "Create a new Solana DID",
+    (yargs) => {
+      return yargs.positional("alias", {
+        describe: "Alias for the DID (e.g., human, agent)",
+        type: "string",
+        choices: KEY_ALIASES
+      });
+    },
+    async (argv) => {
+      await ensureStore();
+      const alias = argv.alias as KeyAlias;
+      await createSolanaDidCommand(alias);
+    }
+  )
+  .command(
+    "did:sol:resolve [did]",
+    "Resolve a Solana DID document",
+    (yargs) => {
+      return yargs.positional("did", {
+        describe: "DID to resolve (e.g., did:sol:devnet:...)",
+        type: "string",
+        demandOption: true
+      });
+    },
+    async (argv) => {
+      await ensureStore();
+      await resolveSolanaDidCommand(argv.did as string);
     }
   )
   .demandCommand()

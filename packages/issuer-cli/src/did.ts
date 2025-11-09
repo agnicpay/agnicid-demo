@@ -3,6 +3,7 @@ import { Keypair, ensureDir, readFile, writeFile } from "@agnicid/shared";
 import type { DidDocument } from "@agnicid/shared";
 import { did as sharedDid, resolveAgnicIdPath } from "@agnicid/shared";
 import { ensureKeypair, KeyAlias } from "./keys.js";
+import { createSolanaDid, getDidDocument } from "./sol-did.js";
 
 type DidAlias = KeyAlias;
 
@@ -107,3 +108,22 @@ export const getVerificationMethodId = (document: DidDocument) => {
   }
   return method.id;
 };
+
+// Solana DID CLI commands
+export const createSolanaDidCommand = async (alias: DidAlias) => {
+  const { did, keypair } = await createSolanaDid();
+  // Store the DID in the aliases registry
+  const aliases = await readAliases();
+  aliases[alias] = did;
+  await writeAliases(aliases);
+  console.log("Created Solana DID:", did);
+  console.log("Public Key:", keypair.publicKey.toBase58());
+  return did;
+};
+
+export const resolveSolanaDidCommand = async (did: string) => {
+  const doc = await getDidDocument(did);
+  console.log("Resolved DID Document:", JSON.stringify(doc, null, 2));
+  return doc;
+};
+

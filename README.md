@@ -83,6 +83,12 @@ node packages/issuer-cli/dist/cli.js keygen
 # Create mock did:sol documents
 node packages/issuer-cli/dist/cli.js did:init
 
+# Create Solana DID on devnet (automatically funded with 0.01 SOL from an external wallet)
+node packages/issuer-cli/dist/cli.js did:sol:create human
+
+# Resolve Solana DID document
+node packages/issuer-cli/dist/cli.js did:sol:resolve did:sol:devnet:...
+
 # Issue credentials
 node packages/issuer-cli/dist/cli.js vc:issue email --email alice@example.com
 node packages/issuer-cli/dist/cli.js vc:issue age --birthdate 1990-01-01

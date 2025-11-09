@@ -26,6 +26,8 @@
   },
   "dependencies": {
     "@agnicid/shared": "file:../../shared",
+    "@identity.com/sol-did-client": "^3.3.0",
+    "@solana/web3.js": "^1.98.4",
     "mkdirp": "^3.0.1",
     "nanoid": "^5.0.7",
     "yargs": "^17.7.2"
