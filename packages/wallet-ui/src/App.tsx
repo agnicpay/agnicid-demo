@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import axios from "axios";
 
 import "./index.css";
@@ -105,6 +105,8 @@ export function App() {
   const [issuing, setIssuing] = useState<CredentialKind | null>(null);
   const [autoIssueRan, setAutoIssueRan] = useState(false);
   const [viewerEntry, setViewerEntry] = useState<CredentialHistoryEntry | null>(null);
+  const [walletInitialized, setWalletInitialized] = useState(false);
+  const resetRequestedRef = useRef(false);
 
   const setView = useCallback((next: ViewMode) => {
     setViewState(next);
@@ -257,10 +259,42 @@ export function App() {
   }, [downloadHref]);
 
   useEffect(() => {
-    if (view === "wallet") {
+    if (view !== "wallet" || walletInitialized || resetRequestedRef.current) {
+      return;
+    }
+    let cancelled = false;
+    resetRequestedRef.current = true;
+    (async () => {
+      try {
+        await axios.post(`${API_BASE}/reset`);
+        if (cancelled) {
+          return;
+        }
+        setBundle(null);
+        setHistory([]);
+        setIssuedState({
+          email: false,
+          age: false,
+          delegation: false
+        });
+        setWalletInitialized(true);
+      } catch (resetError) {
+        if (!cancelled) {
+          resetRequestedRef.current = false;
+          setError(extractError(resetError));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [view, walletInitialized]);
+
+  useEffect(() => {
+    if (view === "wallet" && walletInitialized) {
       refreshStatus();
     }
-  }, [view]);
+  }, [view, walletInitialized]);
 
   useEffect(() => {
     if (view !== "wallet" || stepIndex < ISSUE_STEP_INDEX) {
@@ -297,7 +331,7 @@ export function App() {
   }
 
   if (view === "agent") {
-    return <AgentIde onBack={() => setView("landing")} />;
+    return <AgentIde onBack={() => setView("landing")} bundle={bundle} />;
   }
 
   return (
@@ -743,7 +777,7 @@ function CredentialJsonViewer({
 
 type SidePanelTab = "flow" | "cli" | "identity";
 
-function AgentIde({ onBack }: { onBack: () => void }) {
+function AgentIde({ onBack, bundle }: { onBack: () => void; bundle: BundlePayload | null }) {
   const [jobsUrl, setJobsUrl] = useState("https://demo.agnic.id/api/seller/jobs");
   const [events, setEvents] = useState<AgentTimelineEvent[]>([]);
   const [displayEvents, setDisplayEvents] = useState<AgentTimelineEvent[]>([]);
@@ -751,7 +785,8 @@ function AgentIde({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
-  const [walletStatus, setWalletStatus] = useState<WalletStatus | null>(null);
+  const [agentStatus, setAgentStatus] = useState<WalletStatus | null>(null);
+  const [agentBundle, setAgentBundle] = useState<BundlePayload | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const [sideTab, setSideTab] = useState<SidePanelTab>("identity");
@@ -759,7 +794,7 @@ function AgentIde({ onBack }: { onBack: () => void }) {
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<HTMLPreElement | null>(null);
 
-  const command = `agnicid x402:call ${jobsUrl} --bundle ~/.agnicid`;
+  const command = `agnicid x402:call ${jobsUrl} --bundle ${agentBundle?.filename ?? "agnicid-bundle.zip"}`;
 
   useEffect(() => {
     return () => {
@@ -779,27 +814,77 @@ function AgentIde({ onBack }: { onBack: () => void }) {
     }
   }, [terminalLines]);
 
-  useEffect(() => {
-    const fetchStatus = async () => {
-      setIsLoadingStatus(true);
-      try {
-        const response = await axios.get<WalletStatus>(`${API_BASE}/status`);
-        setWalletStatus(response.data);
-      } catch (statusError) {
-        console.warn("Unable to load wallet status for agent view", statusError);
-      } finally {
-        setIsLoadingStatus(false);
-      }
-    };
-    fetchStatus();
-  }, []);
-
   const appendTerminalLines = useCallback((lines: string | string[]) => {
     const payload = Array.isArray(lines) ? lines : [lines];
     setTerminalLines((prev) => [...prev, ...payload]);
   }, []);
 
+  const inspectAgentBundle = useCallback(
+    async (payload: BundlePayload) => {
+      setIsLoadingStatus(true);
+      setError(null);
+      try {
+        const response = await axios.post<WalletStatus>(`${API_BASE}/agent/inspect`, {
+          bundle: payload.base64
+        });
+        setAgentBundle(payload);
+        setAgentStatus(response.data);
+        appendTerminalLines(
+          `[bundle] Loaded ${payload.filename} (${formatBytes(payload.size)})`
+        );
+      } catch (inspectError) {
+        const message = extractError(inspectError);
+        setError(message);
+        appendTerminalLines(`[error] ${message}`);
+      } finally {
+        setIsLoadingStatus(false);
+      }
+    },
+    [appendTerminalLines]
+  );
+
+  const handleBundleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+    try {
+      const base64 = await fileToBase64(file);
+      await inspectAgentBundle({
+        filename: file.name,
+        size: file.size,
+        base64
+      });
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Failed to read bundle.";
+      setError(message);
+      appendTerminalLines(`[error] ${message}`);
+    }
+  };
+
+  const useExportedBundle = async () => {
+    if (!bundle) {
+      const message = "Export a wallet bundle before loading it into the agent.";
+      setError(message);
+      appendTerminalLines(`[error] ${message}`);
+      return;
+    }
+    await inspectAgentBundle(bundle);
+  };
+
+  const clearImportedBundle = () => {
+    setAgentBundle(null);
+    setAgentStatus(null);
+  };
+
   const runAgent = async () => {
+    if (!agentBundle) {
+      const message = "Import a wallet bundle before running the agent.";
+      setError(message);
+      appendTerminalLines(`[error] ${message}`);
+      return;
+    }
     setIsRunning(true);
     setError(null);
     setResult(null);
@@ -814,7 +899,8 @@ function AgentIde({ onBack }: { onBack: () => void }) {
     });
     try {
       const response = await axios.post(`${API_BASE}/agent/run`, {
-        jobs: jobsUrl
+        jobs: jobsUrl,
+        bundle: agentBundle.base64
       });
       const { events: eventLog, result } = response.data;
       setEvents(eventLog);
@@ -853,16 +939,16 @@ function AgentIde({ onBack }: { onBack: () => void }) {
     });
   };
 
-  const humanDid = walletStatus?.dids?.find((item) => item.alias === "human")?.did;
-  const agentDid = walletStatus?.dids?.find((item) => item.alias === "agent")?.did;
+  const humanDid = agentStatus?.dids?.find((item) => item.alias === "human")?.did;
+  const agentDid = agentStatus?.dids?.find((item) => item.alias === "agent")?.did;
   const credentialList = useMemo(() => {
-    if (!walletStatus?.credentials?.length) {
+    if (!agentStatus?.credentials?.length) {
       return [];
     }
-    return [...walletStatus.credentials]
+    return [...agentStatus.credentials]
       .sort((a, b) => new Date(b.issuedAt ?? 0).getTime() - new Date(a.issuedAt ?? 0).getTime())
       .slice(0, 5);
-  }, [walletStatus]);
+  }, [agentStatus]);
   const terminalContent = useMemo(() => terminalLines.join("\n"), [terminalLines]);
 
   const cliGuide = [
@@ -948,7 +1034,59 @@ function AgentIde({ onBack }: { onBack: () => void }) {
 
         <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
           <div className="space-y-6">
-            <section className="rounded-3xl bg-slate-900/70 p-6 shadow-2xl ring-1 ring-white/5">
+            <section className="rounded-3xl bg-slate-900/70 p-6 shadow-2xl ring-1 ring-white/5 space-y-4">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+                {agentBundle ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-300">Bundle ready</p>
+                      <p className="text-xs text-slate-400">
+                        {agentBundle.filename} · {formatBytes(agentBundle.size)}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={isLoadingStatus}
+                        onClick={() => inspectAgentBundle(agentBundle)}
+                        className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-trustBlue disabled:opacity-40"
+                      >
+                        {isLoadingStatus ? "Inspecting…" : "Re-inspect"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearImportedBundle}
+                        className="rounded-lg border border-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-400 hover:border-rose-400 hover:text-rose-200"
+                      >
+                        Remove bundle
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 text-sm text-slate-400">
+                    <p>Import your exported wallet bundle (zip) to unlock agent commands.</p>
+                    <div className="flex flex-wrap gap-3">
+                      <label className="cursor-pointer rounded-lg border border-dashed border-slate-600 px-4 py-2 text-xs font-semibold text-slate-200 hover:border-trustBlue">
+                        Upload bundle
+                        <input
+                          type="file"
+                          accept=".zip"
+                          className="hidden"
+                          onChange={handleBundleUpload}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={useExportedBundle}
+                        disabled={!bundle || isLoadingStatus}
+                        className="rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 hover:border-trustBlue disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Use exported bundle
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="flex flex-wrap items-center gap-3">
                 <input
                   type="text"
@@ -966,10 +1104,10 @@ function AgentIde({ onBack }: { onBack: () => void }) {
                 <button
                   type="button"
                   onClick={runAgent}
-                  disabled={isRunning}
+                  disabled={isRunning || !agentBundle}
                   className="rounded-lg bg-trustBlue px-4 py-2 text-sm font-semibold text-white shadow hover:bg-trustBlue/90 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {isRunning ? "Running…" : "Run Agent Flow"}
+                  {agentBundle ? (isRunning ? "Running…" : "Run Agent Flow") : "Import bundle first"}
                 </button>
               </div>
               <pre
@@ -1077,20 +1215,17 @@ function AgentIde({ onBack }: { onBack: () => void }) {
                     <button
                       type="button"
                       onClick={() => {
-                        if (isLoadingStatus) return;
-                        setIsLoadingStatus(true);
-                        axios
-                          .get<WalletStatus>(`${API_BASE}/status`)
-                          .then((response) => setWalletStatus(response.data))
-                          .catch((statusError) =>
-                            console.warn("Unable to refresh wallet status", statusError)
-                          )
-                          .finally(() => setIsLoadingStatus(false));
+                        if (!agentBundle || isLoadingStatus) return;
+                        void inspectAgentBundle(agentBundle);
                       }}
-                      className="text-xs font-semibold text-slate-400 hover:text-white"
-                      disabled={isLoadingStatus}
+                      className="text-xs font-semibold text-slate-400 hover:text-white disabled:opacity-40"
+                      disabled={isLoadingStatus || !agentBundle}
                     >
-                      {isLoadingStatus ? "Refreshing…" : "Refresh"}
+                      {isLoadingStatus
+                        ? "Inspecting…"
+                        : agentBundle
+                          ? "Refresh bundle"
+                          : "Import bundle"}
                     </button>
                   </div>
                   <div className="space-y-3">
@@ -1265,6 +1400,22 @@ const downloadJson = (filename: string, content: string) => {
   anchor.click();
   URL.revokeObjectURL(url);
 };
+
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Unable to read file contents"));
+        return;
+      }
+      const commaIndex = result.indexOf(",");
+      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
 
 function LandingPage({
   onStart,

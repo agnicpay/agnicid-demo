@@ -1,13 +1,15 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import os from "node:os";
+import { promises as fs } from "node:fs";
 import AdmZip from "adm-zip";
-import { listStoredCredentials, executeX402Flow } from "@agnicid/agent-sdk";
+import { executeX402Flow, listStoredCredentials } from "@agnicid/agent-sdk";
 import type { AgentEvent } from "@agnicid/agent-sdk";
 import type { KeyAlias } from "@agnicid/issuer-cli";
 import {
   AGNIC_ID_HOME,
-  ensureStore,
+  ensureStore as ensureWalletStore,
   ensureDid,
   ensureKeypair,
   issueAgeCredential,
@@ -16,7 +18,12 @@ import {
   KEY_ALIASES,
   resolveStorePath
 } from "@agnicid/issuer-cli";
-import { listFilesRecursive, pathExists as storagePathExists, readFile as storageReadFile } from "@agnicid/shared";
+import {
+  deleteFile,
+  listFilesRecursive,
+  pathExists as storagePathExists,
+  readFile as storageReadFile
+} from "@agnicid/shared";
 
 export interface WalletApiOptions {
   /**
@@ -45,41 +52,32 @@ export const createWalletApi = (options: WalletApiOptions = {}) => {
   router.get(
     "/health",
     asyncHandler(async (_req, res) => {
-      await ensureStore();
+      await ensureWalletStore();
       res.json({ status: "ok", home: AGNIC_ID_HOME });
+    })
+  );
+
+  router.post(
+    "/reset",
+    asyncHandler(async (_req, res) => {
+      await clearStore(AGNIC_ID_HOME);
+      await ensureWalletStore();
+      res.json({ status: "reset", home: AGNIC_ID_HOME });
     })
   );
 
   router.get(
     "/status",
     asyncHandler(async (_req, res) => {
-      await ensureStore();
-      const keys = await Promise.all(
-        KEY_ALIASES.map(async (alias: KeyAlias) => ({
-          alias,
-          exists: await pathExists(resolveStorePath("keys", `${alias}.key.json`))
-        }))
-      );
-      const dids = await Promise.all(
-        KEY_ALIASES.map(async (alias: KeyAlias) => {
-          const doc = await ensureDid(alias);
-          return { alias, did: doc.id };
-        })
-      );
-      const credentials = await listStoredCredentials();
-      res.json({
-        home: AGNIC_ID_HOME,
-        keys,
-        dids,
-        credentials
-      });
+      const status = await buildStatusSnapshot();
+      res.json(status);
     })
   );
 
   router.get(
     "/credentials",
     asyncHandler(async (_req, res) => {
-      await ensureStore();
+      await ensureWalletStore();
       const credentials = await listStoredCredentials();
       res.json(credentials);
     })
@@ -95,7 +93,7 @@ export const createWalletApi = (options: WalletApiOptions = {}) => {
       if (!email) {
         return res.status(400).json({ error: "email is required" });
       }
-      await ensureStore();
+      await ensureWalletStore();
       const humanDid = await ensureDid("human");
       const result = await issueEmailCredential({
         subjectDid: humanDid.id,
@@ -113,7 +111,7 @@ export const createWalletApi = (options: WalletApiOptions = {}) => {
       if (!birthDate) {
         return res.status(400).json({ error: "birthDate is required" });
       }
-      await ensureStore();
+      await ensureWalletStore();
       const humanDid = await ensureDid("human");
       const result = await issueAgeCredential({
         subjectDid: humanDid.id,
@@ -133,7 +131,7 @@ export const createWalletApi = (options: WalletApiOptions = {}) => {
       if (!ownerEmail) {
         return res.status(400).json({ error: "ownerEmail is required" });
       }
-      await ensureStore();
+      await ensureWalletStore();
       const humanDid = await ensureDid("human");
       const agentDid = await ensureDid("agent");
       const result = await issueDelegationCredential({
@@ -149,19 +147,40 @@ export const createWalletApi = (options: WalletApiOptions = {}) => {
   router.post(
     "/agent/run",
     asyncHandler(async (req, res) => {
-      await ensureStore();
       const defaultJobsUrl = resolveJobsEndpoint(req, options);
-      const { jobs = defaultJobsUrl, includeDelegation = true } = req.body ?? {};
+      const { jobs = defaultJobsUrl, includeDelegation = true, bundle } = req.body ?? {};
+      if (!bundle || typeof bundle !== "string") {
+        return res.status(400).json({ error: "bundle is required to run the agent." });
+      }
       const events: AgentEvent[] = [];
       try {
-        const result = await executeX402Flow(
-          jobs,
-          { includeDelegation },
-          (event: AgentEvent) => events.push(event)
-        );
+        const result = await withBundleWorkspace(bundle, async () => {
+          await ensureWalletStore();
+          return executeX402Flow(
+            jobs,
+            { includeDelegation },
+            (event: AgentEvent) => events.push(event)
+          );
+        });
         res.json({ result, events });
       } catch (error) {
         res.status(400).json({ error: (error as Error).message, events });
+      }
+    })
+  );
+
+  router.post(
+    "/agent/inspect",
+    asyncHandler(async (req, res) => {
+      const { bundle } = req.body ?? {};
+      if (!bundle || typeof bundle !== "string") {
+        return res.status(400).json({ error: "bundle is required to inspect agent state." });
+      }
+      try {
+        const snapshot = await withBundleWorkspace(bundle, buildStatusSnapshot);
+        res.json(snapshot);
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
       }
     })
   );
@@ -181,7 +200,7 @@ export const createWalletApi = (options: WalletApiOptions = {}) => {
         return res.status(400).json({ error: "birthDate is required" });
       }
 
-      await ensureStore();
+      await ensureWalletStore();
       await Promise.all(KEY_ALIASES.map((alias: KeyAlias) => ensureKeypair(alias)));
       const humanDid = await ensureDid("human");
       const agentDid = await ensureDid("agent");
@@ -218,9 +237,9 @@ export const createWalletApi = (options: WalletApiOptions = {}) => {
   router.post(
     "/export",
     asyncHandler(async (_req, res) => {
-      await ensureStore();
+      await ensureWalletStore();
       const zip = new AdmZip();
-      await addDirectoryToZip(zip, AGNIC_ID_HOME, "");
+      await addDirectoryToZip(zip, AGNIC_ID_HOME, "", shouldIncludeInBundle);
       const buffer = zip.toBuffer();
       res.setHeader("Content-Type", "application/zip");
       res.setHeader("Content-Disposition", "attachment; filename=agnicid-bundle.zip");
@@ -269,14 +288,132 @@ const buildAbsoluteFromPath = (req: express.Request, pathSuffix?: string) => {
 
 const pathExists = (target: string) => storagePathExists(target);
 
-const addDirectoryToZip = async (zip: AdmZip, absoluteDir: string, relativeDir: string) => {
+const normalizeBundlePath = (value: string) =>
+  value
+    .split(path.sep)
+    .join("/")
+    .replace(/^\/+/, "");
+
+const KEY_EXCLUDE_SET = new Set(
+  ["keys/human.key.json", "keys/issuer.key.json", "keys/human.pub.json", "keys/issuer.pub.json"].map((entry) =>
+    entry.toLowerCase()
+  )
+);
+
+const shouldIncludeInBundle = (relativePath: string) => {
+  const normalized = normalizeBundlePath(relativePath);
+  if (!normalized) {
+    return false;
+  }
+  return !KEY_EXCLUDE_SET.has(normalized.toLowerCase());
+};
+
+const addDirectoryToZip = async (
+  zip: AdmZip,
+  absoluteDir: string,
+  relativeDir: string,
+  include: (relativePath: string) => boolean
+) => {
   const files = await listFilesRecursive(absoluteDir);
   for (const relativePath of files) {
     const normalizedRelative = path.join(relativeDir, relativePath);
+    const archivePath = normalizeBundlePath(normalizedRelative);
+    if (!include(archivePath)) {
+      continue;
+    }
     const absolutePath = path.join(absoluteDir, normalizedRelative);
     const data = await storageReadFile(absolutePath);
     const buffer = typeof data === "string" ? Buffer.from(data) : data;
-    const archivePath = normalizedRelative.split(path.sep).join("/");
     zip.addFile(archivePath, buffer);
+  }
+};
+
+const getCurrentHome = () => process.env.AGNICID_HOME ?? AGNIC_ID_HOME;
+
+const buildStatusSnapshot = async () => {
+  await ensureWalletStore();
+  const keys = await Promise.all(
+    KEY_ALIASES.map(async (alias: KeyAlias) => ({
+      alias,
+      exists: await pathExists(resolveStorePath("keys", `${alias}.key.json`))
+    }))
+  );
+  const dids = await Promise.all(
+    KEY_ALIASES.map(async (alias: KeyAlias) => {
+      const doc = await ensureDid(alias);
+      return { alias, did: doc.id };
+    })
+  );
+  const credentials = await listStoredCredentials();
+  return {
+    home: getCurrentHome(),
+    keys,
+    dids,
+    credentials
+  };
+};
+
+const clearStore = async (root: string) => {
+  const files = await listFilesRecursive(root);
+  await Promise.all(
+    files.map(async (relativePath) => {
+      const target = path.join(root, relativePath);
+      await deleteFile(target).catch(() => {});
+    })
+  );
+};
+
+const sanitizeEntryPath = (entryName: string) => {
+  const normalized = entryName.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalized || normalized === "." || normalized === "..") {
+    return null;
+  }
+  if (normalized.split("/").some((segment) => segment === "..")) {
+    throw new Error(`Invalid bundle entry path: ${entryName}`);
+  }
+  return normalized;
+};
+
+const extractBundleTo = async (buffer: Buffer, destination: string) => {
+  const zip = new AdmZip(buffer);
+  const entries = zip.getEntries();
+  for (const entry of entries) {
+    const sanitized = sanitizeEntryPath(entry.entryName);
+    if (!sanitized) {
+      continue;
+    }
+    const systemPath = path.join(destination, sanitized.split("/").join(path.sep));
+    if (entry.isDirectory) {
+      await fs.mkdir(systemPath, { recursive: true });
+      continue;
+    }
+    await fs.mkdir(path.dirname(systemPath), { recursive: true });
+    const data = entry.getData();
+    await fs.writeFile(systemPath, data);
+  }
+};
+
+const withTemporaryHome = async <T>(home: string, handler: () => Promise<T>) => {
+  const previousHome = process.env.AGNICID_HOME;
+  process.env.AGNICID_HOME = home;
+  try {
+    return await handler();
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.AGNICID_HOME;
+    } else {
+      process.env.AGNICID_HOME = previousHome;
+    }
+  }
+};
+
+const withBundleWorkspace = async <T>(bundleBase64: string, handler: () => Promise<T>) => {
+  const buffer = Buffer.from(bundleBase64, "base64");
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "agnicid-bundle-"));
+  try {
+    await extractBundleTo(buffer, tempRoot);
+    return await withTemporaryHome(tempRoot, handler);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
   }
 };

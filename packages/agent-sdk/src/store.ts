@@ -3,17 +3,16 @@ import { listDirectory, resolveAgnicIdPath } from "@agnicid/shared";
 import { readJson } from "./fs.js";
 import type { StoredCredential } from "./types.js";
 
-const VCS_DIR = resolveAgnicIdPath("vcs");
-
 export const listStoredCredentials = async (): Promise<StoredCredential[]> => {
   try {
-    const files = await listDirectory(VCS_DIR);
+    const vcsDir = resolveAgnicIdPath("vcs");
+    const files = await listDirectory(vcsDir);
     const records: StoredCredential[] = [];
     for (const file of files) {
       if (!file.endsWith(".json")) {
         continue;
       }
-      const fullPath = path.join(VCS_DIR, file);
+      const fullPath = path.join(vcsDir, file);
       const data = await readJson<{ credential: any; jwt: string }>(fullPath);
       records.push({
         id: data.credential.id,
