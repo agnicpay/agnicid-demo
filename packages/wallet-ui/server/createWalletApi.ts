@@ -22,7 +22,8 @@ import {
   deleteFile,
   listFilesRecursive,
   pathExists as storagePathExists,
-  readFile as storageReadFile
+  readFile as storageReadFile,
+  setAgnicIdHomeOverride
 } from "@agnicid/shared";
 
 export interface WalletApiOptions {
@@ -398,16 +399,18 @@ const extractBundleTo = async (buffer: Buffer, destination: string) => {
 };
 
 const withTemporaryHome = async <T>(home: string, handler: () => Promise<T>) => {
-  const previousHome = process.env.AGNICID_HOME;
+  const previousEnvHome = process.env.AGNICID_HOME;
   process.env.AGNICID_HOME = home;
+  setAgnicIdHomeOverride(home);
   try {
     return await handler();
   } finally {
-    if (previousHome === undefined) {
+    if (previousEnvHome === undefined) {
       delete process.env.AGNICID_HOME;
     } else {
-      process.env.AGNICID_HOME = previousHome;
+      process.env.AGNICID_HOME = previousEnvHome;
     }
+    setAgnicIdHomeOverride(previousEnvHome);
   }
 };
 

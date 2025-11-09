@@ -6,7 +6,7 @@ import { promises as fs } from "node:fs";
 import AdmZip from "adm-zip";
 import { executeX402Flow, listStoredCredentials } from "@agnicid/agent-sdk";
 import { AGNIC_ID_HOME, ensureStore as ensureWalletStore, ensureDid, ensureKeypair, issueAgeCredential, issueDelegationCredential, issueEmailCredential, KEY_ALIASES, resolveStorePath } from "@agnicid/issuer-cli";
-import { deleteFile, listFilesRecursive, pathExists as storagePathExists, readFile as storageReadFile } from "@agnicid/shared";
+import { deleteFile, listFilesRecursive, pathExists as storagePathExists, readFile as storageReadFile, setAgnicIdHomeOverride } from "@agnicid/shared";
 export const createWalletApi = (options = {}) => {
     const router = express.Router();
     router.use(cors());
@@ -269,18 +269,20 @@ const extractBundleTo = async (buffer, destination) => {
     }
 };
 const withTemporaryHome = async (home, handler) => {
-    const previousHome = process.env.AGNICID_HOME;
+    const previousEnvHome = process.env.AGNICID_HOME;
     process.env.AGNICID_HOME = home;
+    setAgnicIdHomeOverride(home);
     try {
         return await handler();
     }
     finally {
-        if (previousHome === undefined) {
+        if (previousEnvHome === undefined) {
             delete process.env.AGNICID_HOME;
         }
         else {
-            process.env.AGNICID_HOME = previousHome;
+            process.env.AGNICID_HOME = previousEnvHome;
         }
+        setAgnicIdHomeOverride(previousEnvHome);
     }
 };
 const withBundleWorkspace = async (bundleBase64, handler) => {
