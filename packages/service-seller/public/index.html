@@ -479,17 +479,54 @@
         updateToggleLabel();
       });
 
-      const socket = io();
-      socket.on("connect", () => setSocketStatus(true));
-      socket.on("disconnect", () => setSocketStatus(false));
-      socket.on("log", (log) => {
-        ingestLog(log);
-      });
-      socket.on("state", (serverState) => {
-        forceUnder18 = serverState.forceUnder18;
-        updateToggleLabel();
-        setLogs(serverState.logs || []);
-      });
+      let pollTimeout = null;
+      const clearPoll = () => {
+        if (pollTimeout) {
+          clearTimeout(pollTimeout);
+          pollTimeout = null;
+        }
+      };
+      const startPolling = () => {
+        if (pollTimeout) {
+          return;
+        }
+        const poll = async () => {
+          try {
+            await fetchState();
+          } catch {
+            // ignore network errors; we'll try again on next tick
+          }
+          pollTimeout = window.setTimeout(poll, 4000);
+        };
+        poll();
+        setSocketStatus(false);
+      };
+
+      const socketFactory = window.io;
+      if (typeof socketFactory === "function") {
+        const socket = socketFactory();
+        socket.on("connect", () => {
+          clearPoll();
+          setSocketStatus(true);
+        });
+        socket.on("disconnect", () => {
+          setSocketStatus(false);
+          startPolling();
+        });
+        socket.io?.on("error", () => {
+          startPolling();
+        });
+        socket.on("log", (log) => {
+          ingestLog(log);
+        });
+        socket.on("state", (serverState) => {
+          forceUnder18 = serverState.forceUnder18;
+          updateToggleLabel();
+          setLogs(serverState.logs || []);
+        });
+      } else {
+        startPolling();
+      }
 
       function ingestLog(log) {
         state.logs = [log, ...state.logs].slice(0, 200);

@@ -744,7 +744,7 @@ function CredentialJsonViewer({
 type SidePanelTab = "flow" | "cli" | "identity";
 
 function AgentIde({ onBack }: { onBack: () => void }) {
-  const [jobsUrl, setJobsUrl] = useState("/api/seller/jobs");
+  const [jobsUrl, setJobsUrl] = useState("https://demo.agnic.id/api/seller/jobs");
   const [events, setEvents] = useState<AgentTimelineEvent[]>([]);
   const [displayEvents, setDisplayEvents] = useState<AgentTimelineEvent[]>([]);
   const [isRunning, setIsRunning] = useState(false);
