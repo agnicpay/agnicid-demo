@@ -53,17 +53,32 @@ const readAliases = async (): Promise<AliasRegistry> => {
   }
 };
 
+const resolveAliasFromDocuments = async (alias: DidAlias) => {
+  const docs = await sharedDid.listDidDocuments();
+  for (const doc of docs) {
+    if (doc.id.includes(`:${alias}:`)) {
+      return doc;
+    }
+  }
+  return null;
+};
+
 export const requireDid = async (alias: DidAlias): Promise<DidDocument> => {
   const aliases = await readAliases();
   const did = aliases[alias];
-  if (!did) {
-    throw new Error(`Missing DID for alias ${alias}. Import a wallet bundle before running this command.`);
+  if (did) {
+    const doc = await sharedDid.loadDidDocument(did);
+    if (doc) {
+      return doc;
+    }
   }
-  const doc = await sharedDid.loadDidDocument(did);
-  if (!doc) {
-    throw new Error(`DID document ${did} not found on disk.`);
+  const fallback = await resolveAliasFromDocuments(alias);
+  if (fallback) {
+    aliases[alias] = fallback.id;
+    await writeAliases(aliases);
+    return fallback;
   }
-  return doc;
+  throw new Error(`Missing DID for alias ${alias}. Import a wallet bundle before running this command.`);
 };
 
 export const resolveDid = (did: string) => sharedDid.loadDidDocument(did);

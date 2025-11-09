@@ -105,6 +105,14 @@ export function App() {
   const [issuing, setIssuing] = useState<CredentialKind | null>(null);
   const [autoIssueRan, setAutoIssueRan] = useState(false);
   const [viewerEntry, setViewerEntry] = useState<CredentialHistoryEntry | null>(null);
+  const emailCredential = useMemo(
+    () => history.find((entry) => entry.kind === "email"),
+    [history]
+  );
+  const ageCredential = useMemo(
+    () => history.find((entry) => entry.kind === "age"),
+    [history]
+  );
   const [walletInitialized, setWalletInitialized] = useState(false);
   const resetRequestedRef = useRef(false);
 
@@ -500,6 +508,7 @@ export function App() {
                         }
                       />
                       <DidSummary dids={walletStatus?.dids ?? []} />
+                      <PersonalDetailsCard emailEntry={emailCredential} ageEntry={ageCredential} />
                       <CredentialHistory history={history} onView={setViewerEntry} />
                     </div>
                   )}
@@ -673,6 +682,59 @@ function DidSummary({ dids }: { dids: { alias: string; did: string }[] }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function PersonalDetailsCard({
+  emailEntry,
+  ageEntry
+}: {
+  emailEntry?: CredentialHistoryEntry | null;
+  ageEntry?: CredentialHistoryEntry | null;
+}) {
+  const emailSubject = (emailEntry?.payload as any)?.credentialSubject ?? {};
+  const ageSubject = (ageEntry?.payload as any)?.credentialSubject ?? {};
+  const email = emailSubject?.email as string | undefined;
+  const emailVerified = emailSubject?.email_verified as boolean | undefined;
+  const birthDate = ageSubject?.birthDate as string | undefined;
+  const ageOver18 = ageSubject?.age_over_18 as boolean | undefined;
+  if (!email && !birthDate) {
+    return null;
+  }
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-4 py-4 text-sm text-slate-600 shadow-sm">
+      <p className="font-semibold text-trustBlue">Enrollment details</p>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        {email && (
+          <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Email</p>
+            <p className="font-semibold text-slate-800 break-all">{email}</p>
+            {emailVerified !== undefined && (
+              <p className="text-xs text-slate-500">
+                Status:{" "}
+                <span className={emailVerified ? "text-emerald-600" : "text-amber-600"}>
+                  {emailVerified ? "Verified" : "Pending"}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
+        {birthDate && (
+          <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Birthdate</p>
+            <p className="font-semibold text-slate-800">{formatDate(birthDate)}</p>
+            {ageOver18 !== undefined && (
+              <p className="text-xs text-slate-500">
+                Policy:{" "}
+                <span className={ageOver18 ? "text-emerald-600" : "text-rose-600"}>
+                  {ageOver18 ? "18+ confirmed" : "Under 18"}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1023,13 +1085,6 @@ function AgentIde({ onBack, bundle }: { onBack: () => void; bundle: BundlePayloa
               Follow the request → 402 → resubmit cycle with live payloads and facilitator notes.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onBack}
-            className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-900"
-          >
-            Back to Landing
-          </button>
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
@@ -1376,6 +1431,21 @@ const deriveIssuedState = (entries: CredentialHistoryEntry[]) => {
     }
   }
   return flags;
+};
+
+const formatDate = (value?: string) => {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  });
 };
 
 const copyText = async (value: string) => {
