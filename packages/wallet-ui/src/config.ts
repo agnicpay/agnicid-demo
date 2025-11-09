@@ -2,9 +2,9 @@
 export const API_CONFIG = {
   // Base URLs for different environments
   development: {
-    BASE_URL: 'http://localhost:3000',
-    WALLET_API: '/api/wallet',
-    SELLER_API: '/api/seller',
+    BASE_URL: 'http://localhost:8787', // API server port
+    WALLET_API: '', // API is mounted at root
+    SELLER_API: 'http://localhost:8081',
     FRONTEND: '/'
   },
   production: {
@@ -21,7 +21,7 @@ export const config = API_CONFIG[env as keyof typeof API_CONFIG] || API_CONFIG.d
 
 // Helper functions
 export const getWalletApiUrl = (path: string = '') => 
-  `${config.WALLET_API}${path}`;
+  `${config.BASE_URL}${config.WALLET_API}${path}`;
 
 export const getSellerApiUrl = (path: string = '') => 
   `${config.SELLER_API}${path}`;

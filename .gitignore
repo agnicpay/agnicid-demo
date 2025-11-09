@@ -7,3 +7,4 @@ coverage
 vite.config.ts.timestamp-*
 package-lock.json
 *.tsbuildinfo
+.idea
