@@ -56,7 +56,8 @@ const readAliases = async (): Promise<AliasRegistry> => {
 const resolveAliasFromDocuments = async (alias: DidAlias) => {
   const docs = await sharedDid.listDidDocuments();
   for (const doc of docs) {
-    if (doc.id.includes(`:${alias}:`)) {
+    const id = doc?.id;
+    if (typeof id === "string" && id.includes(`:${alias}:`)) {
       return doc;
     }
   }
