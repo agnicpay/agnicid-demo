@@ -239,8 +239,8 @@ const clearStore = async (root) => {
 };
 const sanitizeEntryPath = (entryName) => {
     const normalized = entryName.replace(/\\/g, "/").replace(/^\/+/, "");
-    const rootIndex = normalized.indexOf(".agnicid/");
-    const withoutRoot = rootIndex >= 0 ? normalized.slice(rootIndex + ".agnicid/".length) : normalized;
+    const homeIndex = normalized.lastIndexOf(".agnicid/");
+    const withoutRoot = homeIndex >= 0 ? normalized.slice(homeIndex + ".agnicid/".length) : normalized;
     const candidate = withoutRoot.replace(/^\/+/, "");
     if (!candidate || candidate === "." || candidate === "..") {
         return null;
