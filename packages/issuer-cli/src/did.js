@@ -49,7 +49,7 @@ const readAliases = async () => {
 const createDidForAlias = async (alias, keypair) => {
     const role = alias;
     const options = alias === "issuer"
-        ? { id: "did:sol:agnic:issuer", keyFragment: "key-issuer" }
+        ? { id: "did:web:agnic.id:issuer", keyFragment: "key-issuer" }
         : undefined;
     const document = sharedDid.generateDid(role, keypair.publicKey, options);
     await sharedDid.saveDidDocument(document);

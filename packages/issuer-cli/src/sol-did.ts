@@ -7,14 +7,12 @@ import {
   SystemProgram,
   PublicKey
 } from "@solana/web3.js";
-import {
-  DidSolIdentifier,
-  DidSolService,
-} from "@identity.com/sol-did-client";
+import { DidSolIdentifier, DidSolService } from "@identity.com/sol-did-client";
 import fs from "fs";
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { DidDocument } from "@agnicid/shared";
 
 // Get source directory path (going up from dist to src)
 const __filename = fileURLToPath(import.meta.url);
@@ -41,6 +39,7 @@ const getConnection = () => {
 export type SolanaDidResult = {
   did: string;
   keypair: Keypair;
+  document: DidDocument;
 };
 
 export async function createSolanaDid(): Promise<SolanaDidResult> {
@@ -75,11 +74,12 @@ export async function createSolanaDid(): Promise<SolanaDidResult> {
   });
 
   // 5. Create/resolve the DID document
-  await service.resolve();
+  const document = (await service.resolve()) as DidDocument;
 
   return {
     did: didSolIdentifier.toString(),
-    keypair: authority
+    keypair: authority,
+    document
   };
 }
 
@@ -88,11 +88,11 @@ export async function createSolanaDid(): Promise<SolanaDidResult> {
  * @param did The full DID string (e.g., "did:sol:devnet:...")
  * @returns The resolved DID Document
  */
-export async function getDidDocument(did: string): Promise<any> {
+export async function getDidDocument(did: string): Promise<DidDocument> {
   const connection = getConnection();
   const identifier = DidSolIdentifier.parse(did);
   const service = await DidSolService.build(identifier, { connection });
-  const doc = await service.resolve();
+  const doc = (await service.resolve()) as DidDocument;
   return doc;
 }
 

@@ -37,6 +37,11 @@ const steps = [
     id: "export",
     title: "Export Bundle",
     description: "Download your local credential bundle."
+  },
+  {
+    id: "handoff",
+    title: "Agent Handoff",
+    description: "Send the exported bundle to your agent runtime."
   }
 ] as const;
 
@@ -115,6 +120,7 @@ export function App() {
   );
   const [walletInitialized, setWalletInitialized] = useState(false);
   const resetRequestedRef = useRef(false);
+  const autoExportRequestedRef = useRef(false);
 
   const setView = useCallback((next: ViewMode) => {
     setViewState(next);
@@ -148,6 +154,8 @@ export function App() {
       case "issue":
         return issuedState.email && issuedState.age && issuedState.delegation;
       case "export":
+        return Boolean(bundle);
+      case "handoff":
         return true;
       default:
         return false;
@@ -161,7 +169,13 @@ export function App() {
       return;
     }
     if (steps[stepIndex].id === "export") {
-      await handleExport();
+      if (!bundle) {
+        await handleExport();
+        return;
+      }
+    }
+    if (steps[stepIndex].id === "handoff") {
+      setView("agent");
       return;
     }
     setStepIndex((prev) => Math.min(prev + 1, steps.length - 1));
@@ -172,19 +186,18 @@ export function App() {
     setStepIndex((prev) => Math.max(prev - 1, 0));
   };
 
-  const handleExport = async () => {
+  const handleExport = useCallback(async () => {
     setIsSubmitting(true);
     setError(null);
     try {
       const response = await axios.post<BundlePayload>(`${API_BASE}/export`);
       setBundle(response.data);
-      setStepIndex((prev) => Math.min(prev + 1, steps.length - 1));
     } catch (err) {
       setError(extractError(err));
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [API_BASE]);
 
   const refreshStatus = async () => {
     try {
@@ -328,12 +341,27 @@ export function App() {
     })();
   }, [view, stepIndex, autoIssueRan, issuedState]);
 
+  useEffect(() => {
+    if (view !== "wallet") {
+      return;
+    }
+    if (steps[stepIndex].id === "export") {
+      if (!bundle && !isSubmitting && !autoExportRequestedRef.current) {
+        autoExportRequestedRef.current = true;
+        void handleExport();
+      }
+    } else {
+      autoExportRequestedRef.current = false;
+    }
+  }, [view, stepIndex, bundle, isSubmitting, handleExport]);
+
   if (view === "landing") {
     return (
       <LandingPage
-      onStart={() => setView("wallet")}
-      onLearn={() => window.open("https://agnic.id", "_blank")}
-      onAgent={() => setView("agent")}
+        onStart={() => setView("wallet")}
+        onLearn={() => window.open("https://agnic.id", "_blank")}
+        onSeller={() => window.open("http://localhost:8081", "_blank")}
+        onAgent={() => setView("agent")}
       />
     );
   }
@@ -513,30 +541,64 @@ export function App() {
                     </div>
                   )}
 
-                  {steps[stepIndex].id === "export" && bundle && (
-                    <div className="space-y-4">
-                      <div className="rounded-lg border border-emerald/50 bg-emerald/10 px-4 py-4 text-sm text-emerald-700">
-                        <p className="font-semibold text-emerald-600">Bundle ready</p>
-                        <p>
-                          Save this archive to transfer your agent keys and credentials to another
-                          device or workflow.
+                  {steps[stepIndex].id === "export" &&
+                    (bundle ? (
+                      <div className="space-y-4">
+                        <div className="rounded-lg border border-emerald/50 bg-emerald/10 px-4 py-4 text-sm text-emerald-700">
+                          <p className="font-semibold text-emerald-600">Bundle ready</p>
+                          <p>
+                            Save this archive to transfer your agent keys and credentials to another
+                            device or workflow.
+                          </p>
+                        </div>
+                        {downloadHref && (
+                          <a
+                            href={downloadHref}
+                            download={bundle.filename}
+                            className="inline-flex items-center rounded-lg bg-trustBlue px-4 py-2 text-sm font-medium text-white shadow hover:bg-trustBlue/90"
+                          >
+                            Download {bundle.filename} ({formatBytes(bundle.size)})
+                          </a>
+                        )}
+                        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">
+                          Keys and credentials stored in:
+                          <code className="ml-2 rounded bg-slate-900/90 px-2 py-1 text-xs text-white">
+                            {storePath}
+                          </code>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-6 py-8 text-center text-sm text-slate-600">
+                        <p className="font-semibold text-slate-700">Preparing your bundle…</p>
+                        <p className="mt-2">
+                          We’re exporting the Solana-backed DID documents, keys, and credentials into
+                          a single archive. This only takes a moment.
                         </p>
                       </div>
-                      {downloadHref && (
-                        <a
-                          href={downloadHref}
-                          download={bundle.filename}
-                          className="inline-flex items-center rounded-lg bg-trustBlue px-4 py-2 text-sm font-medium text-white shadow hover:bg-trustBlue/90"
-                        >
-                          Download {bundle.filename} ({formatBytes(bundle.size)})
-                        </a>
-                      )}
-                      <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">
-                        Keys and credentials stored in:
-                        <code className="ml-2 rounded bg-slate-900/90 px-2 py-1 text-xs text-white">
-                          {storePath}
-                        </code>
+                    ))}
+
+                  {steps[stepIndex].id === "handoff" && (
+                    <div className="space-y-4">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-5 text-sm text-slate-600 shadow-sm">
+                        <p className="text-base font-semibold text-trustBlue">You’re all set.</p>
+                        <p className="mt-2">
+                          Your human identity now lives on Solana as a funded <code>did:sol</code>,
+                          and your agent has a dedicated <code>did:web</code> plus all the verifiable
+                          credentials it needs to clear payment walls. The exported bundle keeps
+                          everything local-first.
+                        </p>
+                        <p className="mt-2">
+                          Next, open the Agent SDK to import this bundle, answer x402 challenges, and
+                          demo the sample seller flow.
+                        </p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setView("agent")}
+                        className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-slate-950"
+                      >
+                        Go to Agent SDK
+                      </button>
                     </div>
                   )}
 
@@ -596,7 +658,9 @@ function callToAction(
     case "issue":
       return issuedState.email && issuedState.age && issuedState.delegation ? "Export bundle" : "Issue credentials";
     case "export":
-      return bundle ? "Complete" : "Download bundle";
+      return bundle ? "Continue" : "Preparing bundle…";
+    case "handoff":
+      return "Launch Agent IDE";
     default:
       return "Next";
   }
@@ -840,7 +904,10 @@ function CredentialJsonViewer({
 type SidePanelTab = "flow" | "cli" | "identity";
 
 function AgentIde({ onBack, bundle }: { onBack: () => void; bundle: BundlePayload | null }) {
-  const [jobsUrl, setJobsUrl] = useState("https://demo.agnic.id/api/seller/jobs");
+  const defaultJobsUrl = import.meta.env.DEV
+    ? "http://localhost:8081/jobs"
+    : "https://demo.agnic.id/api/seller/jobs";
+  const [jobsUrl, setJobsUrl] = useState(defaultJobsUrl);
   const [events, setEvents] = useState<AgentTimelineEvent[]>([]);
   const [displayEvents, setDisplayEvents] = useState<AgentTimelineEvent[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -1207,7 +1274,7 @@ function AgentIde({ onBack, bundle }: { onBack: () => void; bundle: BundlePayloa
                       </button>
                     </div>
                     {expandedEvent === event.id && (
-                      <pre className="mt-3 overflow-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-200">
+                      <pre className="mt-3 max-h-64 w-full overflow-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-200 break-words break-all whitespace-pre-wrap">
                         {JSON.stringify(event.payload ?? {}, null, 2)}
                       </pre>
                     )}
@@ -1402,7 +1469,9 @@ function IdentityCard({
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
       <p className="text-xs uppercase tracking-[0.4em] text-slate-500">{label}</p>
-      <p className="mt-1 font-mono text-sm text-white">{did ?? "not created yet"}</p>
+      <p className="mt-1 max-w-full break-all font-mono text-sm text-white">
+        {did ?? "not created yet"}
+      </p>
       <p className="mt-1 text-xs text-slate-500">{description}</p>
       <p className="mt-2 text-[11px] uppercase tracking-[0.3em] text-slate-500">alias: {alias}</p>
     </div>
@@ -1490,11 +1559,13 @@ const fileToBase64 = (file: File): Promise<string> =>
 function LandingPage({
   onStart,
   onLearn,
-  onAgent
+  onAgent,
+  onSeller
 }: {
   onStart: () => void;
   onLearn: () => void;
   onAgent: () => void;
+  onSeller: () => void;
 }) {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#fefefe] via-[#f5f6fb] to-[#eaecf5] px-6 py-16">
@@ -1502,33 +1573,41 @@ function LandingPage({
         <div className="space-y-8">
           <p className="text-xs uppercase tracking-[0.4em] text-slate-500">agnic.id</p>
           <h1 className="text-4xl font-semibold leading-tight text-graphite md:text-5xl">
-            Your Identity. <span className="text-trustBlue">Your Agents.</span>
+            Own Your Identity. <br/><span className="text-trustBlue">Run Your Agents.</span>
           </h1>
           <p className="text-lg text-slate-600">
-            Launch secure agentic payments with verifiable credentials you control. Enroll, delegate,
-            and prove policy compliance in one calm, trustworthy flow.
+            Launch secure agentic payments with verifiable credentials you control. Every new human
+            wallet now mints a funded <span className="font-semibold text-trustBlue">did:sol</span> on
+            Solana devnet, anchors it on-chain, and hands you the keys for issuing credentials and delegating agents.
           </p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 w-full">
             <button
               type="button"
               onClick={onStart}
-              className="rounded-xl bg-trustBlue px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-trustBlue/30 transition hover:-translate-y-0.5 hover:bg-trustBlue/90"
+              className="flex-1 min-w-[160px] rounded-xl bg-trustBlue px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-trustBlue/30 transition hover:-translate-y-0.5 hover:bg-trustBlue/90"
             >
               Start Wallet
             </button>
             <button
               type="button"
-              onClick={onLearn}
-              className="rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:-translate-y-0.5 hover:border-trustBlue hover:text-trustBlue"
+              onClick={onSeller}
+              className="flex-1 min-w-[160px] rounded-xl border border-violet-200 bg-violet-50 px-6 py-3 text-sm font-semibold text-violet-700 transition hover:-translate-y-0.5 hover:border-violet-500 hover:bg-violet-100"
             >
-              Learn about Agnic.ID
+              Sample API Seller
             </button>
             <button
               type="button"
               onClick={onAgent}
-              className="rounded-xl border border-slate-500 px-6 py-3 text-sm font-semibold text-slate-100 bg-slate-900 transition hover:-translate-y-0.5 hover:bg-slate-950"
+              className="flex-1 min-w-[160px] rounded-xl border border-slate-500 px-6 py-3 text-sm font-semibold text-slate-100 bg-slate-900 transition hover:-translate-y-0.5 hover:bg-slate-950"
             >
               Open Agent IDE
+            </button>
+            <button
+              type="button"
+              onClick={onLearn}
+              className="w-full rounded-2xl border border-slate-200 px-6 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm shadow-slate-200 transition hover:-translate-y-0.5 hover:border-trustBlue hover:text-trustBlue"
+            >
+              Learn about Agnic.ID
             </button>
           </div>
           <div className="flex items-center gap-4 text-xs text-slate-500">
@@ -1540,6 +1619,10 @@ function LandingPage({
               <span className="h-2 w-2 rounded-full bg-trustBlue animate-ping" />
               W3C VC 2.0
             </span>
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-yellow-400" />
+              Solana Devnet DID funding
+            </span>
           </div>
         </div>
         <div className="relative">
@@ -1548,15 +1631,15 @@ function LandingPage({
             <div className="mt-6 grid gap-4 text-sm text-slate-600">
               <p className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                Human issues Email + Age credentials
+                Human wallet mints `did:sol` + issues Email & Age credentials
               </p>
               <p className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-trustBlue" />
-                Agent receives delegation & answers x402
+                Agent receives delegation from the Solana DID & answers x402
               </p>
               <p className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-purple-500" />
-                Seller verifies payment + JWT-VP proof
+                Sample seller verifies payment, Solana DID doc, and JWT-VP proof
               </p>
             </div>
           </div>

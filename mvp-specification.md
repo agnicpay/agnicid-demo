@@ -137,7 +137,7 @@ Content-Type: application/json
 {
   "@context": ["https://www.w3.org/2018/credentials/v1"],
   "type": ["VerifiableCredential", "EmailCredential"],
-  "issuer": "did:sol:agnic:issuer",
+  "issuer": "did:web:agnic.id:issuer",
   "issuanceDate": "ISO-8601",
   "credentialSubject": {
     "id": "did:sol:human",
@@ -154,7 +154,7 @@ Content-Type: application/json
 {
   "@context": ["https://www.w3.org/2018/credentials/v1"],
   "type": ["VerifiableCredential", "AgeCredential"],
-  "issuer": "did:sol:agnic:issuer",
+  "issuer": "did:web:agnic.id:issuer",
   "issuanceDate": "ISO-8601",
   "credentialSubject": {
     "id": "did:sol:human",
@@ -174,7 +174,7 @@ Content-Type: application/json
   "issuer": "did:sol:human",
   "issuanceDate": "ISO-8601",
   "credentialSubject": {
-    "id": "did:sol:agent",
+    "id": "did:web:agnic.id:agents:h34bd89Dr1",
     "capabilities": {
       "paymentProtocols": ["x402"],
       "spendCapDaily": "100 USDC"
@@ -352,7 +352,7 @@ We now need a **polished landing page for the user wallet (wallet‑ui)** that r
 
 * **Brand mood:** trustable, minimal, robust, innovative, simple, solid, honest.
 * **Visuals:** clean typography, calm neutral palette (off‑white + charcoal + accent blue/purple), soft edges, smooth transitions.
-* **Layout:** hero section describing “Your Identity. Your Agents.” with CTA to “Start Wallet” and “Learn about Agnic.ID”.
+* **Layout:** hero section describing “Your Identity. Your Agents.” with CTAs to “Start Wallet”, “Learn about Agnic.ID”, and “Sample API Seller” (alongside the “Open Agent IDE” secondary action).
 * Include a short animated flow graphic (even placeholder SVG) showing human → agent → service provider.
 * Keep it responsive and lightweight (Vite + Tailwind).
 
@@ -360,4 +360,3 @@ We now need a **polished landing page for the user wallet (wallet‑ui)** that r
 
 * All crypto/VC operations remain local (IndexedDB / `~/.agnicid`).
 * The wallet onboarding must connect visually to our brand while being demo‑ready for product showcases.
-

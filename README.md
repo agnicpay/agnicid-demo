@@ -80,10 +80,10 @@ The agent CLI no longer generates identity materials; import a bundle exported f
 # Generate keys (human, agent, issuer)
 node packages/issuer-cli/dist/cli.js keygen
 
-# Create mock did:sol documents
+# Initialize DIDs (human alias now mints a real did:sol on devnet)
 node packages/issuer-cli/dist/cli.js did:init
 
-# Create Solana DID on devnet (automatically funded with 0.01 SOL from an external wallet)
+# Force-create/rotate a Solana DID on devnet (auto-funded with 0.01 SOL from the funded wallet)
 node packages/issuer-cli/dist/cli.js did:sol:create human
 
 # Resolve Solana DID document
@@ -99,6 +99,8 @@ node packages/issuer-cli/dist/cli.js vc:list
 ```
 
 All data lives under `~/.agnicid` (keys, DIDs, VCs, presentations).
+
+> Wallet enrollment (or any call to `ensureDid("human")`) now provisions a fresh `did:sol:devnet:...` by funding a new Solana keypair with 0.01 SOL from `packages/issuer-cli/src/assets/funded-devnet-wallet.json`. The resolved document and keypair are cached under `~/.agnicid` for later credential issuance. The agent alias now mints `did:web:agnic.id:agents/<10-char>` identifiers so delegation credentials always reference a public, web-hosted DID per installation.
 
 ### Seller endpoints
 
@@ -118,6 +120,8 @@ The wallet UI runs an accompanying API (`http://localhost:8787`):
 - `POST /api/enroll` → generates keys, DIDs, and all three credentials
 - `POST /api/export` → returns a base64 zip of `~/.agnicid`
 - `GET /api/status` → status of keys, DIDs, and stored credentials
+
+When `~/.agnicid` is empty (fresh install or `/api/reset`), the first human DID request will pause briefly to fund a Solana devnet wallet, publish the DID on-chain, and store both the DID document and signing keys locally.
 
 ### Testing the end-to-end flow manually
 
@@ -141,7 +145,7 @@ Flip the seller console toggle and re-run the last command to show the failure p
 ### Future work (Phase 1.5+)
 
 - Implement the `mcp-bridge` for n8n/MCP demos
-- Add Solana `did:sol` publishing (Devnet)
+- Expand Solana usage beyond the human alias (agent/issuer, production clusters)
 - Introduce SD-JWT/BBS+ selective disclosure variants
 
 ---
