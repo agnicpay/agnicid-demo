@@ -24,23 +24,41 @@ Agnic.ID demonstrates the complete Know-Your-Agent (KYA) flow for x402 agentic p
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Solana](https://img.shields.io/badge/Solana-Ready-success)](https://solana.com)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.4.5-blue)](https://www.typescriptlang.org/)
+
+---
+
+**Submission for:**  
+# Solana X402 Hackathon**  
+🏅 *Best Trustless Agent* | 🧰 *Best x402 Dev Tool*
 
 
-## 🏆 Solana X402 Hackathon
+### ✨ What We Built 
 
-### Best Trustless Agent Category
+- ✅ **Agent SDK & CLI** — issue, manage, and verify DIDs and Verifiable Credentials for agents.  
+- ✅ **x402 + DID Integration** — combine payments and identity in one HTTP request.  
+- ✅ **Delegation Credentials** — users can authorize agents to act and spend on their behalf.  
+- ✅ **Selective Disclosure** — agents reveal only what’s needed (e.g. “Over 18”, “Authorized for $10”).  
+- ✅ **Solana Devnet Deployment** — live demo running at [https://demo.agnic.id](https://demo.agnic.id)
+- ❤️ **Proudly Open Source under Apache 2.0**
 
-**Agnic.ID Delivers:**
-- Empowering Autonomous agents with identity and delegation credentials.
-- Created an Agent SDK and CLI to accelerate x402 development on Solana.
-- Integrates x402 protocol and W3C DID/VC agentic identity with Solana
-- Deployed to Solana devnet
-- Include documentation on how to run and use your project
-- Proudly Open Source ❤️ under Apache 2.0
-- 
 
-##  Project Structure
+
+### 🧩 Core Architecture  
+
+| Layer | Description |
+|-------|--------------|
+| **Agnic.ID Service** | Issues & verifies DIDs/VCs, bridges human ↔ agent |
+| **Solana DID Registry** | Decentralized identity anchor (`did:sol`) |
+| **KYA Engine** | Know-Your-Agent verification layer |
+| **x402 Protocol** | Enables agentic payments |
+| **SDK / CLI** | Developer toolkit for issuing and presenting credentials |
+
+---
+
+
+
+###  Project Structure 
 
 The monorepo contains five packages:
 
