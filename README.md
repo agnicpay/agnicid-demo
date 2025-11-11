@@ -1,10 +1,46 @@
-## Agnic.ID 
+
+# 🔐 Agnic.ID — Verifiable Identity for Agents
+
+**Agnic.ID** is the decentralized identity layer of the **Agnic Stack**, giving AI agents and their users a **verifiable, privacy-preserving identity** they can use across the open web.
+It extends *Know-Your-Customer (KYC)* to *Know-Your-Agent (KYA)* — enabling agents to prove **who they are**, **who they act for**, and **what they’re allowed to do.**
+
+Built on open standards:
+
+* **W3C DIDs** and **Verifiable Credentials (VCs)**
+* **Solana DID:SOL** for decentralized trust anchoring
+* **DIF Credential Schemas** and **OpenID4VC / x402 compatibility**
+
+With Agnic.ID, every agent can:
+
+* Hold a **Decentralized Identifier (DID)**
+* Present **selective proofs** like “age over 18” or “authorized to spend $10”
+* Combine **identity + payment** in one verifiable request
+
+Agnic.ID is the **trust layer for the agentic web** — simple, open, and ready for the next generation of autonomous payments and interactions.
+
+> **Live Demo:** [https://demo.agnic.id](https://demo.agnic.id)
 
 Agnic.ID demonstrates the complete Know-Your-Agent (KYA) flow for x402 agentic payments. 
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Solana](https://img.shields.io/badge/Solana-Ready-success)](https://solana.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
+
+
+## 🏆 Solana X402 Hackathon
+
+### Best Trustless Agent Category
+
+**Agnic.ID Delivers:**
+- Empowering Autonomous agents with identity and delegation credentials.
+- Created an Agent SDK and CLI to accelerate x402 development on Solana.
+- Integrates x402 protocol and W3C DID/VC agentic identity with Solana
+- Deployed to Solana devnet
+- Include documentation on how to run and use your project
+- Proudly Open Source ❤️ under Apache 2.0
+- 
+
+##  Project Structure
 
 The monorepo contains five packages:
 
@@ -153,7 +189,10 @@ Flip the seller console toggle and re-run the last command to show the failure p
 - Implement the `mcp-bridge` for n8n/MCP demos
 - Expand Solana usage beyond the human alias (agent/issuer, production clusters)
 - Introduce SD-JWT/BBS+ selective disclosure variants
+- Integrate ERC-8004 registries to bridge Solana DIDs with EVM agent identity
 
----
 
-Identity you can verify — and understand.
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](./LICENSE) file for details.
+
