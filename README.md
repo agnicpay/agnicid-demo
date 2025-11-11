@@ -1,6 +1,12 @@
-## Agnic.ID MVP
+## Agnic.ID 
 
-Agnic.ID demonstrates the complete Know-Your-Agent (KYA) flow for x402 agentic payments. The monorepo contains five packages:
+Agnic.ID demonstrates the complete Know-Your-Agent (KYA) flow for x402 agentic payments. 
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Solana](https://img.shields.io/badge/Solana-Ready-success)](https://solana.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
+
+The monorepo contains five packages:
 
 | Package | Purpose |
 | --- | --- |
